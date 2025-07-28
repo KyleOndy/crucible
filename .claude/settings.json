@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__clojure-mcp__*",
+      "Bash(bb*)"
+    ]
+  }
+}

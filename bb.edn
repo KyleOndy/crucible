@@ -19,9 +19,9 @@
              (println "Port written to .nrepl-port file")
              (-> (Runtime/getRuntime)
                  (.addShutdownHook
-                  (Thread. (fn [] 
-                            (fs/delete-if-exists ".nrepl-port")
-                            (println "nREPL server stopped, .nrepl-port deleted")))))
+                  (Thread. (fn []
+                             (fs/delete-if-exists ".nrepl-port")
+                             (println "nREPL server stopped, .nrepl-port deleted")))))
              (deref (promise))))}
 
   dev
@@ -35,4 +35,25 @@
    :task (do
            (when (fs/exists? ".nrepl-port")
              (fs/delete ".nrepl-port")
-             (println "Cleaned .nrepl-port")))}}}}
+             (println "Cleaned .nrepl-port")))}
+
+  ;; === CRUCIBLE USER-FACING COMMANDS ===
+
+  crucible
+  {:doc "Main Crucible CLI dispatcher"
+   :task (load-file "core/bin/crucible.clj")}
+
+  ;; Convenience aliases for common commands
+  l
+  {:doc "Open daily log (alias for: crucible log daily)"
+   :task (run 'crucible {:extra-args ["log" "daily"]})}
+
+  pipe
+  {:doc "Pipe stdin to daily log (alias for: crucible pipe)"
+   :task (run 'crucible {:extra-args ["pipe"]})}
+
+  work-on
+  {:doc "Start working on a ticket (alias for: crucible work-on <ticket>)"
+   :task (if-let [ticket (first *command-line-args*)]
+           (run 'crucible {:extra-args ["work-on" ticket]})
+           (println "Usage: bb work-on <ticket-id>"))}}}

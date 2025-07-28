@@ -4,6 +4,29 @@
 
 Implementation roadmap for Crucible - an AI-powered SRE productivity system built with Babashka.
 
+## Current Status (Updated 2025-07-28)
+
+✅ **Phase 0: Development Environment Setup** - COMPLETED
+
+- [x] nREPL server setup with MCP integration
+- [x] Unified bb.edn structure (development + user commands)
+- [x] Core directory structure created
+- [x] CLI dispatcher with help system implemented
+
+🚧 **Phase 1: Project Setup & Core Infrastructure** - IN PROGRESS
+
+- [x] Basic CLI framework with command routing
+- [x] Project organization decisions documented
+- [ ] Configuration management system
+- [ ] Enhanced logging system implementation
+
+### Recent Achievements
+
+- **Project Organization**: Chose unified bb.edn approach over separate files
+- **CLI Architecture**: Implemented main dispatcher in `core/bin/crucible.clj`
+- **Command Structure**: Both `bb crucible <cmd>` and convenience aliases (`bb l`, `bb pipe`, etc.)
+- **Documentation**: Updated README.md with architecture decisions and getting started guide
+
 ## Phase 0: Development Environment Setup
 
 ### Task 0.1: nREPL Server Setup
