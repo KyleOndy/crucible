@@ -1,0 +1,82 @@
+{
+  // markdownlint-cli2 configuration
+  "config": {
+    // Default rule configuration
+    "default": true,
+    
+    // Line length rules - disable for TASKS.md since task descriptions can be long
+    "MD013": {
+      "line_length": 120,
+      "code_blocks": false,
+      "tables": false,
+      "headings": false
+    },
+    
+    // Allow duplicate headings (useful for task sections)
+    "MD024": {
+      "siblings_only": true
+    },
+    
+    // Allow inline HTML (useful for complex formatting in docs)
+    "MD033": false,
+    
+    // Allow bare URLs (common in development docs)
+    "MD034": false,
+    
+    // Don't require language for fenced code blocks in certain contexts
+    "MD040": false,
+    
+    // Allow first line to not be a heading (useful for files with metadata)
+    "MD041": false
+  },
+  
+  // File-specific overrides
+  "customRules": [],
+  
+  // Ignore specific rules for specific files
+  "ignores": [],
+  
+  // File-specific configurations
+  "config": {
+    "default": true,
+    "MD013": {
+      "line_length": 120,
+      "code_blocks": false,
+      "tables": false,
+      "headings": false
+    },
+    "MD022": true,   // Require blank lines around headings
+    "MD024": {
+      "siblings_only": true
+    },
+    "MD025": true,   // Enforce single H1 per document
+    "MD026": true,   // No trailing punctuation in headings
+    "MD033": false,
+    "MD034": false,
+    "MD040": false,
+    "MD041": false
+  },
+  
+  // Override for TASKS.md specifically
+  "TASKS.md": {
+    "MD013": false,  // Disable line length for TASKS.md
+    "MD024": false,  // Allow duplicate headings (multiple priority sections)
+    "MD029": false   // Allow different ordered list styles
+  },
+  
+  // Override for README files
+  "README*.md": {
+    "MD013": {
+      "line_length": 100
+    }
+  },
+  
+  // Globs to ignore
+  "globs": [
+    "!node_modules/**",
+    "!.git/**",
+    "!target/**",
+    "!dist/**",
+    "!build/**"
+  ]
+}
