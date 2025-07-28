@@ -1,0 +1,19 @@
+{:paths ["src" "core/lib"]
+
+ :deps {org.clojure/clojure {:mvn/version "1.11.1"}
+        nrepl/nrepl {:mvn/version "1.0.0"}
+        cider/cider-nrepl {:mvn/version "0.42.1"}
+        clj-http/clj-http {:mvn/version "3.12.3"}
+        org.babashka/cli {:mvn/version "0.7.53"}}
+
+ :aliases
+ {:dev {:extra-deps {org.clojure/tools.namespace {:mvn/version "1.4.4"}
+                     org.clojure/tools.deps.alpha {:mvn/version "0.15.1244"}}
+        :extra-paths ["dev"]}
+
+  :test {:extra-deps {org.clojure/test.check {:mvn/version "1.1.1"}}
+         :extra-paths ["test"]}
+
+  :mcp {:main-opts ["-m" "nrepl.cmdline"
+                    "--middleware" "[cider.nrepl/cider-middleware]"
+                    "--port" "0"]}}}

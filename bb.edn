@@ -1,0 +1,38 @@
+{:deps {nrepl/nrepl {:mvn/version "1.0.0"}
+        cider/cider-nrepl {:mvn/version "0.42.1"}
+        clj-http/clj-http {:mvn/version "3.12.3"}
+        org.babashka/cli {:mvn/version "0.7.53"}}
+
+ :tasks
+ {:requires ([babashka.fs :as fs]
+             [babashka.nrepl.server :as srv])
+
+  nrepl
+  {:doc "Start nREPL server for MCP integration"
+   :task (do
+           (println "Starting nREPL server for MCP integration...")
+           (let [port (+ 40000 (rand-int 10000))] ; Random port in range 40000-50000
+             (srv/start-server! {:host "localhost"
+                                 :port port})
+             (spit ".nrepl-port" (str port))
+             (println (str "nREPL server started on port " port))
+             (println "Port written to .nrepl-port file")
+             (-> (Runtime/getRuntime)
+                 (.addShutdownHook
+                  (Thread. (fn [] 
+                            (fs/delete-if-exists ".nrepl-port")
+                            (println "nREPL server stopped, .nrepl-port deleted")))))
+             (deref (promise))))}
+
+  dev
+  {:doc "Start development environment"
+   :task (do
+           (println "Starting Crucible development environment...")
+           (run 'nrepl))}
+
+  clean
+  {:doc "Clean REPL artifacts"
+   :task (do
+           (when (fs/exists? ".nrepl-port")
+             (fs/delete ".nrepl-port")
+             (println "Cleaned .nrepl-port")))}}}}

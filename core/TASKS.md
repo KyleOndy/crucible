@@ -4,6 +4,33 @@
 
 Implementation roadmap for Crucible - an AI-powered SRE productivity system built with Babashka.
 
+## Phase 0: Development Environment Setup
+
+### Task 0.1: nREPL Server Setup
+
+**Priority:** High | **Estimated Time:** 30 minutes | **Dependencies:** None | **Status:** Completed
+
+- [x] Create bb.edn with nREPL server task and dependencies
+- [x] Create deps.edn for Clojure project configuration
+- [x] Configure .gitignore for REPL artifacts
+- [x] Test nREPL server startup and .nrepl-port creation
+
+**Acceptance Criteria:**
+
+- `bb nrepl` starts nREPL server and creates .nrepl-port file
+- MCP can connect to nREPL server for code evaluation
+- Proper cleanup on server shutdown
+
+**Usage:**
+
+```bash
+# Start nREPL server for MCP integration
+bb nrepl
+
+# Clean up REPL artifacts
+bb clean
+```
+
 ## Phase 1: Project Setup & Core Infrastructure
 
 ### Task 1.1: Project Structure Setup

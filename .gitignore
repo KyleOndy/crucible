@@ -1,2 +1,13 @@
 # generated with flake.nix
 .mcp.json
+
+# REPL artifacts
+.nrepl-port
+.lsp/
+.clj-kondo/
+.calva/
+.cpcache/
+pom.xml
+
+# Workspace directory (contains sensitive data)
+workspace/
