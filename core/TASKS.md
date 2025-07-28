@@ -4,92 +4,14 @@
 
 Implementation roadmap for Crucible - an AI-powered SRE productivity system built with Babashka.
 
-## Current Status (Updated 2025-07-28)
-
-✅ **Phase 0: Development Environment Setup** - COMPLETED
-
-- [x] nREPL server setup with MCP integration
-- [x] Unified bb.edn structure (development + user commands)
-- [x] Core directory structure created
-- [x] CLI dispatcher with help system implemented
-
-🚧 **Phase 1: Project Setup & Core Infrastructure** - IN PROGRESS
-
-- [x] Basic CLI framework with command routing
-- [x] Project organization decisions documented
-- [ ] Configuration management system
-- [ ] Enhanced logging system implementation
-
-### Recent Achievements
-
-- **Project Organization**: Chose unified bb.edn approach over separate files
-- **CLI Architecture**: Implemented main dispatcher in `core/bin/crucible.clj`
-- **Command Structure**: Both `bb crucible <cmd>` and convenience aliases (`bb l`, `bb pipe`, etc.)
-- **Documentation**: Updated README.md with architecture decisions and getting started guide
-
-## Phase 0: Development Environment Setup
-
-### Task 0.1: nREPL Server Setup
-
-**Priority:** High | **Estimated Time:** 30 minutes | **Dependencies:** None | **Status:** Completed
-
-- [x] Create bb.edn with nREPL server task and dependencies
-- [x] Create deps.edn for Clojure project configuration
-- [x] Configure .gitignore for REPL artifacts
-- [x] Test nREPL server startup and .nrepl-port creation
-
-**Acceptance Criteria:**
-
-- `bb nrepl` starts nREPL server and creates .nrepl-port file
-- MCP can connect to nREPL server for code evaluation
-- Proper cleanup on server shutdown
-
-**Usage:**
-
-```bash
-# Start nREPL server for MCP integration
-bb nrepl
-
-# Clean up REPL artifacts
-bb clean
-```
-
-## Phase 1: Project Setup & Core Infrastructure
-
-### Task 1.1: Project Structure Setup
-
-**Priority:** High | **Estimated Time:** 1-2 hours | **Dependencies:** None
-
-- [ ] Create core directory structure:
-
-  ```
-  crucible/
-  ├── core/
-  │   ├── bin/crucible.clj
-  │   ├── lib/
-  │   └── templates/
-  ├── workspace/
-  ├── bb.edn
-  └── .gitignore
-  ```
-
-- [ ] Set up .gitignore to exclude `workspace/` and sensitive files
-- [ ] Create initial bb.edn with basic dependencies
-
-**Acceptance Criteria:**
-
-- Directory structure matches specification
-- Workspace directory is properly ignored by git
-- bb.edn includes required dependencies (clj-http, babashka.cli, babashka.process)
-
-### Task 1.2: Basic CLI Framework
+### Task 1.2: Basic CLI Framework ✅ COMPLETED
 
 **Priority:** High | **Estimated Time:** 2-3 hours | **Dependencies:** 1.1
 
-- [ ] Create main CLI dispatcher in `core/bin/crucible.clj`
-- [ ] Set up command routing using babashka.cli
-- [ ] Implement basic help system
-- [ ] Create shell alias setup instructions
+- [x] Create main CLI dispatcher in `core/bin/crucible.clj`
+- [x] Set up command routing using babashka.cli
+- [x] Implement basic help system
+- [x] Create shell alias setup instructions
 
 **Acceptance Criteria:**
 
@@ -115,14 +37,15 @@ bb clean
 
 ## Phase 2: Enhanced Logging System
 
-### Task 2.1: Daily Log Management
+### Task 2.1: Daily Log Management ✅ COMPLETED
 
 **Priority:** High | **Estimated Time:** 2-3 hours | **Dependencies:** 1.2
 
-- [ ] Implement `c l` command to open daily log
-- [ ] Create daily log file naming convention (YYYY-MM-DD.md)
-- [ ] Set up workspace/logs/ directory structure
-- [ ] Integrate with $EDITOR environment variable
+- [x] Implement `c l` command to open daily log
+- [x] Create daily log file naming convention (YYYY-MM-DD.md)
+- [x] Set up workspace/logs/ directory structure
+- [x] Integrate with $EDITOR environment variable
+- [x] Added template system with variable substitution
 
 **Acceptance Criteria:**
 

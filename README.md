@@ -11,11 +11,13 @@ Crucible is an AI-powered SRE productivity system that streamlines daily operati
 Crucible uses a unified development approach with a single `bb.edn` file that serves two purposes:
 
 ### 1. Development Tasks
+
 - `bb nrepl` - Start nREPL server for MCP integration
 - `bb dev` - Start development environment  
 - `bb clean` - Clean REPL artifacts
 
 ### 2. User-Facing Commands
+
 - `bb crucible <command>` - Main CLI dispatcher
 - `bb l` - Convenience alias for daily log
 - `bb pipe` - Convenience alias for piping stdin to logs
@@ -53,10 +55,12 @@ This approach allows seamless development while providing an optimal end-user ex
 ## Getting Started
 
 ### Prerequisites
+
 - [Babashka](https://github.com/babashka/babashka) installed
 - Java 11+ (for development dependencies)
 
 ### Development Setup
+
 ```bash
 # Start development environment with nREPL
 bb dev
@@ -72,12 +76,14 @@ bb crucible work-on TEST-123
 ## Current Status
 
 ✅ **Phase 0: Project Setup** (Completed)
+
 - [x] Development environment with nREPL integration
 - [x] Unified bb.edn task structure
 - [x] Core directory structure
 - [x] CLI dispatcher with help system
 
 🚧 **Phase 1: Core Infrastructure** (In Progress)
+
 - [ ] Enhanced logging system
 - [ ] Configuration management
 - [ ] Basic command implementations
@@ -89,7 +95,9 @@ See `core/TASKS.md` for detailed implementation roadmap.
 ## Key Design Decisions
 
 ### Single bb.edn Approach
+
 After evaluating multiple approaches, we chose a unified `bb.edn` structure because:
+
 - Maintains all project concerns in one place
 - Clear separation between development and user tasks
 - Natural progression from script to binary distribution
@@ -97,7 +105,9 @@ After evaluating multiple approaches, we chose a unified `bb.edn` structure beca
 - Simplifies MCP integration for development
 
 ### Progressive Distribution
+
 Rather than immediately creating a binary, Crucible starts as babashka scripts and graduates to native binaries. This approach:
+
 - Enables rapid development iteration
 - Provides flexibility during feature development
 - Allows testing of the full user workflow early

@@ -46,14 +46,14 @@
   ;; Convenience aliases for common commands
   l
   {:doc "Open daily log (alias for: crucible log daily)"
-   :task (run 'crucible {:extra-args ["log" "daily"]})}
+   :task (shell "bb crucible log daily")}
 
   pipe
   {:doc "Pipe stdin to daily log (alias for: crucible pipe)"
-   :task (run 'crucible {:extra-args ["pipe"]})}
+   :task (shell "bb crucible pipe")}
 
   work-on
   {:doc "Start working on a ticket (alias for: crucible work-on <ticket>)"
    :task (if-let [ticket (first *command-line-args*)]
-           (run 'crucible {:extra-args ["work-on" ticket]})
+           (shell (str "bb crucible work-on " ticket))
            (println "Usage: bb work-on <ticket-id>"))}}}
