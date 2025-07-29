@@ -10,18 +10,18 @@
   {:jira {:base-url nil
           :username nil
           :api-token nil}
-   
+
    :confluence {:base-url nil
                 :username nil
                 :api-token nil}
-   
+
    :workspace {:root-dir "workspace"
                :logs-dir "logs"
                :tickets-dir "tickets"
                :docs-dir "docs"}
-   
+
    :editor nil
-   
+
    :tmux {:session-prefix "crucible-"
           :default-layout "main-vertical"}})
 
@@ -65,7 +65,7 @@
   (cond
     (and (map? m1) (map? m2))
     (merge-with deep-merge m1 m2)
-    
+
     (nil? m2) m1
     :else m2))
 
@@ -159,10 +159,10 @@
         errors (cond-> []
                  (not (:base-url jira-config))
                  (conj "Missing Jira base URL (set in config file or CRUCIBLE_JIRA_URL)")
-                 
+
                  (not (:username jira-config))
                  (conj "Missing Jira username (set in config file or CRUCIBLE_JIRA_USER)")
-                 
+
                  (not (:api-token jira-config))
                  (conj "Missing Jira API token (set in config file or CRUCIBLE_JIRA_TOKEN)"))]
     (when (seq errors)
@@ -176,10 +176,10 @@
         errors (cond-> []
                  (not (:base-url conf-config))
                  (conj "Missing Confluence base URL (set in config file or CRUCIBLE_CONFLUENCE_URL)")
-                 
+
                  (not (:username conf-config))
                  (conj "Missing Confluence username (set in config file or CRUCIBLE_CONFLUENCE_USER)")
-                 
+
                  (not (:api-token conf-config))
                  (conj "Missing Confluence API token (set in config file or CRUCIBLE_CONFLUENCE_TOKEN)"))]
     (when (seq errors)

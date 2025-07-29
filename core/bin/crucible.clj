@@ -2,16 +2,20 @@
 
 ;; Load library files
 (load-file "core/lib/config.clj")
+(load-file "core/lib/jira.clj")
+(load-file "core/lib/tickets.clj")
+(load-file "core/lib/tmux.clj")
 
 
-(ns crucible.main
+(ns crucible
   (:require
-    [babashka.cli :as cli]
     [babashka.fs :as fs]
     [babashka.process :as process]
-    [clojure.java.io :as io]
     [clojure.string :as str]
-    [lib.config :as config])
+    [lib.config :as config]
+    [lib.jira :as jira]
+    [lib.tickets :as tickets]
+    [lib.tmux :as tmux])
   (:import
     (java.time
       LocalDate
@@ -64,8 +68,8 @@
 
 
 (defn get-date-info
-  []
   "Returns map with formatted date information for template substitution"
+  []
   (let [today (LocalDate/now)
         day-formatter (DateTimeFormatter/ofPattern "EEEE" Locale/ENGLISH)
         full-formatter (DateTimeFormatter/ofPattern "EEEE, MMMM d, yyyy" Locale/ENGLISH)]
@@ -75,8 +79,8 @@
 
 
 (defn process-template
-  [template-content date-info]
   "Replace template variables with actual values"
+  [template-content date-info]
   (-> template-content
       (str/replace "{{DATE}}" (:date date-info))
       (str/replace "{{DAY_NAME}}" (:day-name date-info))
@@ -84,8 +88,8 @@
 
 
 (defn ensure-log-directory
-  []
   "Create workspace/logs/daily directory if it doesn't exist"
+  []
   (let [log-dir "workspace/logs/daily"]
     (when-not (fs/exists? log-dir)
       (fs/create-dirs log-dir))
@@ -93,8 +97,8 @@
 
 
 (defn get-daily-log-path
-  []
   "Get the path for today's daily log file"
+  []
   (let [log-dir (ensure-log-directory)
         date-info (get-date-info)
         filename (str (:date date-info) ".md")]
@@ -102,8 +106,8 @@
 
 
 (defn create-daily-log-from-template
-  [log-path]
   "Create daily log file from template if it doesn't exist"
+  [log-path]
   (when-not (fs/exists? log-path)
     (let [template-path "core/templates/daily-log.md"
           date-info (get-date-info)]
@@ -116,8 +120,8 @@
 
 
 (defn launch-editor
-  [file-path]
   "Launch editor with the given file path"
+  [file-path]
   (let [editor (System/getenv "EDITOR")]
     (if editor
       (try
@@ -132,8 +136,8 @@
 
 
 (defn open-daily-log
-  []
   "Open today's daily log in the configured editor"
+  []
   (let [log-path (get-daily-log-path)]
     (create-daily-log-from-template log-path)
     (launch-editor log-path)))
@@ -179,8 +183,7 @@
               next-section-pattern #"(?m)^## (?!Commands & Outputs)"
               matcher (re-matcher sections-pattern current-content)]
           (if (.find matcher)
-            (let [section-start (.start matcher)
-                  section-end (.end matcher)
+            (let [section-end (.end matcher)
                   ;; Find where the next section starts (if any)
                   remaining-content (subs current-content section-end)
                   next-matcher (re-matcher next-section-pattern remaining-content)
@@ -198,9 +201,52 @@
 
 (defn work-on-command
   [ticket-id]
-  (if ticket-id
-    (println (str "Starting work on ticket: " ticket-id " (not implemented yet)"))
-    (println "Error: ticket ID required")))
+  (if-not ticket-id
+    (do
+      (println "Error: ticket ID required")
+      (println "Usage: crucible work-on <ticket-id>")
+      (System/exit 1))
+    (let [config (config/load-config)]
+      ;; Validate Jira configuration
+      (let [validation-result (config/validate-jira-config config)]
+        (when-not (:valid? validation-result)
+          (println "Jira configuration error:")
+          (doseq [error (:errors validation-result)]
+            (println (str "  - " error)))
+          (println "\nPlease check your configuration.")
+          (System/exit 1)))
+
+      ;; Test Jira connection
+      (println "Connecting to Jira...")
+      (let [conn-test (jira/test-connection (:jira config))]
+        (when-not (:success conn-test)
+          (println (str "Failed to connect to Jira: " (:message conn-test)))
+          (System/exit 1)))
+
+      ;; Fetch ticket and set up workspace
+      (println (str "Fetching ticket " ticket-id "..."))
+      (let [workspace-result (tickets/setup-ticket-workspace config ticket-id)]
+        (if (:success workspace-result)
+          (let [ticket-path (:path workspace-result)
+                ticket-data (:ticket workspace-result)
+                ticket-summary (jira/format-ticket-summary ticket-data)
+                session-name (str (get-in config [:tmux :session-prefix]) ticket-id)]
+            (println (str "\n✓ Ticket: " (:key ticket-summary) " - " (:summary ticket-summary)))
+            (println (str "  Status: " (:status ticket-summary)))
+            (println (str "  Assignee: " (:assignee ticket-summary)))
+            (println (str "\n✓ Workspace created at: " ticket-path))
+
+            ;; Switch to tmux session
+            (if (tmux/inside-tmux?)
+              (println "\nAlready inside tmux. Please manually switch to the ticket directory:")
+              (do
+                (println (str "\nStarting tmux session: " session-name))
+                (let [tmux-result (tmux/switch-to-session session-name (str ticket-path))]
+                  (when-not (:success tmux-result)
+                    (println (str "Failed to start tmux session: " (:error tmux-result))))))))
+          (do
+            (println (str "Error: " (:error workspace-result)))
+            (System/exit 1)))))))
 
 
 (defn sync-docs-command
