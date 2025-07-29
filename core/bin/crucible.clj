@@ -1,12 +1,17 @@
 #!/usr/bin/env bb
 
+;; Load library files
+(load-file "core/lib/config.clj")
+
+
 (ns crucible.main
   (:require
     [babashka.cli :as cli]
     [babashka.fs :as fs]
     [babashka.process :as process]
     [clojure.java.io :as io]
-    [clojure.string :as str])
+    [clojure.string :as str]
+    [lib.config :as config])
   (:import
     (java.time
       LocalDate

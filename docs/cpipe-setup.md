@@ -52,6 +52,7 @@ Or simply restart your terminal.
 ## Usage Examples
 
 ### Basic Commands
+
 ```bash
 cpipe "ls -la"
 cpipe "ps aux | grep docker"
@@ -59,6 +60,7 @@ cpipe "kubectl get pods"
 ```
 
 ### Tee-like Behavior (Enhanced!)
+
 Crucible's pipe functionality acts like an enhanced `tee` - it logs the output AND passes it through to the next command:
 
 ```bash
@@ -73,6 +75,7 @@ ps aux | bb pipe "ps aux" | grep python | bb pipe "grep python" | awk '{print $2
 ```
 
 ### Complex Pipelines
+
 ```bash
 cpipe "kubectl get pods | grep Running | awk '{print \$1}'"
 cpipe "cat /var/log/syslog | grep ERROR | tail -10"
@@ -80,12 +83,14 @@ cpipe "docker ps | grep -v CONTAINER"
 ```
 
 ### With Command Substitution
+
 ```bash
 cpipe "echo 'Current time: \$(date)'"
 cpipe "ls -la \$(pwd)"
 ```
 
 ### With Environment Variables
+
 ```bash
 cpipe "echo \$PATH | tr ':' '\n'"
 cpipe "ls -la \$HOME"
@@ -149,6 +154,7 @@ ctee() {
 ```
 
 Usage in pipeline debugging:
+
 ```bash
 # Debug each step of a complex pipeline
 ctee "kubectl get pods" | ctee "grep Running" | ctee "awk '{print \$1}'" | head -5
@@ -233,16 +239,19 @@ Usage: `kcpipe get pods`, `kcpipe describe pod my-pod`
 ## Shell-Specific Notes
 
 ### Bash
+
 - Works with bash 3.0+
 - `$*` expands to all arguments as a single string
 - PIPESTATUS array available for exit codes
 
 ### Zsh
+
 - Works with zsh 4.0+
 - `$*` behavior same as bash
 - Use `$pipestatus` array for exit codes
 
 ### Fish
-- Uses `$argv` instead of `$*` 
+
+- Uses `$argv` instead of `$*`
 - Functions are automatically loaded from `~/.config/fish/functions/`
 - Use `$pipestatus` for exit codes
