@@ -3,11 +3,15 @@
 
 # REPL artifacts
 .nrepl-port
+.nrepl-pid
 .lsp/
 .clj-kondo/
 .calva/
 .cpcache/
 pom.xml
+
+# Logs
+logs/
 
 # Workspace directory (contains sensitive data)
 workspace/

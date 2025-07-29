@@ -5,37 +5,68 @@
 
  :tasks
  {:requires ([babashka.fs :as fs]
-             [babashka.nrepl.server :as srv])
+             [babashka.nrepl.server :as srv]
+             [babashka.process :as p])
 
   nrepl
-  {:doc "Start nREPL server for MCP integration"
+  {:doc "Start nREPL server for MCP integration (in background)"
    :task (do
            (println "Starting nREPL server for MCP integration...")
-           (let [port (+ 40000 (rand-int 10000))] ; Random port in range 40000-50000
-             (srv/start-server! {:host "localhost"
-                                 :port port})
-             (spit ".nrepl-port" (str port))
-             (println (str "nREPL server started on port " port))
-             (println "Port written to .nrepl-port file")
-             (-> (Runtime/getRuntime)
-                 (.addShutdownHook
-                  (Thread. (fn []
-                             (fs/delete-if-exists ".nrepl-port")
-                             (println "nREPL server stopped, .nrepl-port deleted")))))
-             (deref (promise))))}
+           (fs/create-dirs "logs")
+           (let [port (+ 40000 (rand-int 10000)) ; Random port in range 40000-50000
+                 log-file (fs/file "logs" "nrepl.log")
+                 proc (p/process {:out log-file
+                                  :err log-file
+                                  :shutdown p/destroy-tree}
+                                 "bb" "-e"
+                                 (pr-str (list 'do
+                                            '(require '[babashka.nrepl.server :as srv])
+                                            (list 'let ['server (list 'srv/start-server! {:host "localhost"
+                                                                                          :port port})]
+                                              (list 'spit ".nrepl-port" (str port))
+                                              '(spit ".nrepl-pid" (str (.pid (java.lang.ProcessHandle/current))))
+                                              (list 'println (str "nREPL server started on port " port))
+                                              '(println "Port written to .nrepl-port file")
+                                              '(println "PID written to .nrepl-pid file")
+                                              '(deref (promise))))))]
+             (Thread/sleep 1000) ; Give server time to start
+             (if (fs/exists? ".nrepl-port")
+               (do
+                 (println (str "nREPL server started on port " port))
+                 (println "Logs are being written to logs/nrepl.log"))
+               (println "Failed to start nREPL server - check logs/nrepl.log"))))}
 
-  dev
+  dev:start
   {:doc "Start development environment"
    :task (do
            (println "Starting Crucible development environment...")
            (run 'nrepl))}
+
+  dev:stop
+  {:doc "Stop development environment"
+   :task (do
+           (println "Stopping Crucible development environment...")
+           (if (fs/exists? ".nrepl-pid")
+             (let [pid (slurp ".nrepl-pid")]
+               (try
+                 (p/destroy-tree {:pid (parse-long pid)})
+                 (println "nREPL server stopped")
+                 (catch Exception e
+                   (println "Failed to stop nREPL server:" (.getMessage e))))
+               (fs/delete ".nrepl-pid")
+               (fs/delete-if-exists ".nrepl-port")
+               (println "Cleaned up nREPL artifacts"))
+             (println "No nREPL server running")))}
 
   clean
   {:doc "Clean REPL artifacts"
    :task (do
            (when (fs/exists? ".nrepl-port")
              (fs/delete ".nrepl-port")
-             (println "Cleaned .nrepl-port")))}
+             (println "Cleaned .nrepl-port"))
+           (when (fs/exists? ".nrepl-pid")
+             (fs/delete ".nrepl-pid")
+             (println "Cleaned .nrepl-pid")))}
 
   ;; === CRUCIBLE USER-FACING COMMANDS ===
 
@@ -50,7 +81,7 @@
 
   pipe
   {:doc "Pipe stdin to daily log (alias for: crucible pipe)"
-   :task (shell "bb crucible pipe")}
+   :task (apply shell "bb" "crucible" "pipe" *command-line-args*)}
 
   work-on
   {:doc "Start working on a ticket (alias for: crucible work-on <ticket>)"

@@ -73,6 +73,29 @@ bb crucible log daily
 bb crucible work-on TEST-123
 ```
 
+### Command Output Logging
+
+Crucible includes a powerful pipe functionality for capturing command outputs in your daily logs.
+It works like an enhanced `tee` - logging to your daily log while passing output through to the next command:
+
+```bash
+# Basic piping (no command logged)
+kubectl get pods | bb pipe
+
+# With command logging
+kubectl get pods | bb pipe "kubectl get pods"
+
+# Tee-like behavior - logs AND continues pipeline
+kubectl get pods | bb pipe "kubectl get pods" | grep Running | wc -l
+
+# Automatic command logging with cpipe wrapper
+cpipe() { eval "$*" | bb pipe "$*"; }
+cpipe "kubectl get pods | grep Running"
+```
+
+The `cpipe` function automatically executes commands and logs both the command and output to your daily log.
+See `docs/cpipe-setup.md` for detailed setup instructions for bash, zsh, and fish shells.
+
 ## Current Status
 
 ✅ **Phase 0: Project Setup** (Completed)
@@ -84,7 +107,8 @@ bb crucible work-on TEST-123
 
 🚧 **Phase 1: Core Infrastructure** (In Progress)
 
-- [ ] Enhanced logging system
+- [x] Enhanced logging system with pipe functionality
+- [x] Daily log management with template system  
 - [ ] Configuration management
 - [ ] Basic command implementations
 

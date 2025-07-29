@@ -53,14 +53,14 @@ Implementation roadmap for Crucible - an AI-powered SRE productivity system buil
 - Log files created in `workspace/logs/daily/` with correct naming
 - Handles missing editor gracefully
 
-### Task 2.2: Log Piping Functionality
+### Task 2.2: Log Piping Functionality ✅ COMPLETED
 
 **Priority:** High | **Estimated Time:** 3-4 hours | **Dependencies:** 2.1
 
-- [ ] Implement `c pipe` command to read from stdin
-- [ ] Add metadata capture (timestamp, working directory, command context)
-- [ ] Format piped content as markdown code blocks
-- [ ] Append to current daily log
+- [x] Implement `c pipe` command to read from stdin
+- [x] Add metadata capture (timestamp, working directory, command context)
+- [x] Format piped content as markdown code blocks
+- [x] Append to current daily log
 
 **Acceptance Criteria:**
 
