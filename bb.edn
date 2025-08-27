@@ -1,6 +1,5 @@
 {:deps {nrepl/nrepl {:mvn/version "1.0.0"}
         cider/cider-nrepl {:mvn/version "0.42.1"}
-        clj-http/clj-http {:mvn/version "3.12.3"}
         org.babashka/cli {:mvn/version "0.7.53"}}
 
  :tasks
@@ -87,4 +86,10 @@
   {:doc "Start working on a ticket (alias for: crucible work-on <ticket>)"
    :task (if-let [ticket (first *command-line-args*)]
            (shell (str "bb crucible work-on " ticket))
-           (println "Usage: bb work-on <ticket-id>"))}}}
+           (println "Usage: bb work-on <ticket-id>"))}
+
+  qs
+  {:doc "Create a quick Jira story (alias for: crucible quick-story)"
+   :task (if-let [summary (first *command-line-args*)]
+           (shell "bb" "crucible" "qs" summary)
+           (println "Usage: bb qs \"Story summary\""))}}}

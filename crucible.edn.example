@@ -1,41 +1,36 @@
 ;; Crucible Configuration Example
-;; Copy this file to crucible.edn or ~/.crucible/config.edn and customize
+;; Copy this file to crucible.edn or ~/.config/crucible/config.edn and customize
+;; (Legacy location ~/.crucible/config.edn is also supported)
 
 {;; Jira configuration (required for work-on command)
  :jira {:base-url "https://mycompany.atlassian.net"
         :username "user@company.com"
         ;; Use pass: prefix to fetch from password manager
         ;; Or use plain text token (not recommended)
-        :api-token "pass:work/atlassian/jira-token"}
- 
- ;; Confluence configuration (required for sync-docs command)
- :confluence {:base-url "https://mycompany.atlassian.net/wiki"
-              :username "user@company.com"
-              ;; Password manager integration recommended
-              :api-token "pass:work/atlassian/confluence-token"}
+        :api-token "pass:work/atlassian/jira-token"
+        ;; Quick story defaults
+        :default-project "PROJ"           ; Default project key for quick stories
+        :default-issue-type "Task"        ; Default issue type: "Task", "Story", "Bug", etc.
+        :default-story-points 1           ; Default story points
+        :auto-assign-self true            ; Auto-assign new stories to yourself
+        :auto-add-to-sprint true}         ; Auto-add new stories to current sprint
  
  ;; Workspace configuration
  ;; All paths support ~ for home directory expansion
  :workspace {:root-dir "workspace"      ; or absolute path like "~/work/crucible-workspace"
              :logs-dir "logs"           ; relative to root-dir
-             :tickets-dir "tickets"     ; relative to root-dir
              :docs-dir "docs"}          ; relative to root-dir
  
  ;; Editor fallback (used if $EDITOR environment variable not set)
  :editor "vim"
  
- ;; Tmux configuration for work-on command
- :tmux {:session-prefix "crucible-"     ; prefix for tmux session names
-        :default-layout "main-vertical"}} ; tmux layout preset
+}
 
 ;; Environment Variable Overrides
 ;; The following environment variables can override config file values:
 ;; - CRUCIBLE_JIRA_URL → :jira :base-url
 ;; - CRUCIBLE_JIRA_USER → :jira :username
 ;; - CRUCIBLE_JIRA_TOKEN → :jira :api-token
-;; - CRUCIBLE_CONFLUENCE_URL → :confluence :base-url
-;; - CRUCIBLE_CONFLUENCE_USER → :confluence :username
-;; - CRUCIBLE_CONFLUENCE_TOKEN → :confluence :api-token
 ;; - CRUCIBLE_WORKSPACE_DIR → :workspace :root-dir
 ;; - EDITOR → :editor
 
@@ -48,7 +43,7 @@
 
 ;; Configuration Loading Order (later overrides earlier):
 ;; 1. Built-in defaults
-;; 2. ~/.crucible/config.edn (user global config)
+;; 2. ~/.config/crucible/config.edn or ~/.crucible/config.edn (user global config)
 ;; 3. ./crucible.edn (project-specific config)
 ;; 4. Environment variables
 ;; 5. Password manager resolution (for pass: prefixed values)

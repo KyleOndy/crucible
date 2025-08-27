@@ -3,8 +3,6 @@
 ;; Load library files
 (load-file "core/lib/config.clj")
 (load-file "core/lib/jira.clj")
-(load-file "core/lib/tickets.clj")
-(load-file "core/lib/tmux.clj")
 
 
 (ns crucible
@@ -13,9 +11,7 @@
     [babashka.process :as process]
     [clojure.string :as str]
     [lib.config :as config]
-    [lib.jira :as jira]
-    [lib.tickets :as tickets]
-    [lib.tmux :as tmux])
+    [lib.jira :as jira])
   (:import
     (java.time
       LocalDate
@@ -34,36 +30,40 @@
 (defn help-text
   []
   (str "Crucible - AI-powered SRE productivity system\n\n"
-       "Usage: bb crucible <command> [options]\n\n"
+       "Usage: c <command> [options]  (after setup)\n"
+       "       bb crucible <command> [options]  (before alias setup)\n\n"
        "Commands:\n"
        "  help              Show this help\n"
        "  log daily         Open today's daily log\n"
        "  pipe [command]    Pipe stdin to daily log (optionally log the command)\n"
-       "  work-on <ticket>  Start working on a ticket\n"
-       "  sync-docs         Sync documentation from Confluence\n\n"
-       "Development Commands:\n"
-       "  nrepl             Start nREPL server for MCP integration\n"
-       "  dev               Start development environment\n"
-       "  clean             Clean REPL artifacts\n\n"
+       "  quick-story <summary>  Create a quick Jira story\n"
+       "  qs <summary>      Alias for quick-story\n\n"
+       "Quick Setup:\n"
+       "  1. Add alias: alias c='bb crucible'\n"
+       "  2. Add to shell config for persistence\n"
+       "  3. See docs/setup-guide.md for detailed instructions\n\n"
        "Use 'bb <command>' for convenience aliases:\n"
-       "  bb l              Alias for 'bb crucible log daily'\n"
-       "  bb pipe           Alias for 'bb crucible pipe'\n"
-       "  bb work-on <id>   Alias for 'bb crucible work-on <id>'\n\n"
+       "  bb l              Alias for 'c log daily'\n"
+       "  bb pipe           Alias for 'c pipe'\n"
+       "  bb qs <summary>   Alias for 'c quick-story'\n\n"
+       "Quick Story Examples:\n"
+       "  c qs \"Fix login timeout issue\"\n"
+       "  c quick-story \"Add rate limiting to API\"\n\n"
        "Pipe Examples:\n"
-       "  kubectl get pods | bb pipe\n"
-       "  ls -la | bb pipe \"ls -la\"\n"
-       "  kubectl get pods | bb pipe \"kubectl get pods\"\n\n"
+       "  kubectl get pods | c pipe\n"
+       "  ls -la | c pipe \"ls -la\"\n"
+       "  kubectl get pods | c pipe \"kubectl get pods\"\n\n"
        "Tee-like Behavior (logs AND passes output through):\n"
-       "  kubectl get pods | bb pipe \"kubectl get pods\" | grep Running\n"
-       "  ps aux | bb pipe \"ps aux\" | head -5\n"
-       "  cat file.txt | bb pipe \"cat file.txt\" | sort | uniq\n\n"
+       "  kubectl get pods | c pipe \"kubectl get pods\" | grep Running\n"
+       "  ps aux | c pipe \"ps aux\" | head -5\n"
+       "  cat file.txt | c pipe \"cat file.txt\" | sort | uniq\n\n"
        "For automatic command logging, add this function to your shell profile:\n"
-       "  cpipe() { eval \"$*\" | bb pipe \"$*\"; }\n"
+       "  cpipe() { eval \"$*\" | c pipe \"$*\"; }\n"
        "Then use: cpipe kubectl get pods\n\n"
        "Setup Instructions:\n"
        "  Bash: Add to ~/.bashrc or ~/.bash_profile\n"
        "  Zsh:  Add to ~/.zshrc\n"
-       "  Fish: Add 'function cpipe; eval $argv | bb pipe \"$argv\"; end' to ~/.config/fish/functions/cpipe.fish\n"
+       "  Fish: Add 'function cpipe; eval $argv | c pipe \"$argv\"; end' to ~/.config/fish/functions/cpipe.fish\n"
        "  Then restart your shell or run: source ~/.bashrc (or ~/.zshrc)\n"))
 
 
@@ -199,59 +199,72 @@
         (println (str "✓ Output piped to " log-path))))))
 
 
-(defn work-on-command
-  [ticket-id]
-  (if-not ticket-id
+(defn quick-story-command
+  "Create a quick Jira story with minimal input"
+  [summary]
+  (if-not summary
     (do
-      (println "Error: ticket ID required")
-      (println "Usage: crucible work-on <ticket-id>")
+      (println "Error: story summary required")
+      (println "Usage: crucible quick-story \"Your story summary\"")
+      (println "   or: crucible qs \"Your story summary\"")
       (System/exit 1))
-    (let [config (config/load-config)]
-      ;; Validate Jira configuration
-      (let [validation-result (config/validate-jira-config config)]
-        (when-not (:valid? validation-result)
-          (println "Jira configuration error:")
-          (doseq [error (:errors validation-result)]
-            (println (str "  - " error)))
-          (println "\nPlease check your configuration.")
-          (System/exit 1)))
+    (let [config (config/load-config)
+          jira-config (:jira config)]
 
-      ;; Test Jira connection
-      (println "Connecting to Jira...")
-      (let [conn-test (jira/test-connection (:jira config))]
-        (when-not (:success conn-test)
-          (println (str "Failed to connect to Jira: " (:message conn-test)))
-          (System/exit 1)))
+      ;; Validate configuration
+      (when-not (:base-url jira-config)
+        (println "Error: Jira configuration missing")
+        (println "Please set CRUCIBLE_JIRA_URL or configure in crucible.edn")
+        (System/exit 1))
 
-      ;; Fetch ticket and set up workspace
-      (println (str "Fetching ticket " ticket-id "..."))
-      (let [workspace-result (tickets/setup-ticket-workspace config ticket-id)]
-        (if (:success workspace-result)
-          (let [ticket-path (:path workspace-result)
-                ticket-data (:ticket workspace-result)
-                ticket-summary (jira/format-ticket-summary ticket-data)
-                session-name (str (get-in config [:tmux :session-prefix]) ticket-id)]
-            (println (str "\n✓ Ticket: " (:key ticket-summary) " - " (:summary ticket-summary)))
-            (println (str "  Status: " (:status ticket-summary)))
-            (println (str "  Assignee: " (:assignee ticket-summary)))
-            (println (str "\n✓ Workspace created at: " ticket-path))
+      (when-not (:default-project jira-config)
+        (println "Error: No default project configured")
+        (println "Please set :jira :default-project in your config file")
+        (System/exit 1))
 
-            ;; Switch to tmux session
-            (if (tmux/inside-tmux?)
-              (println "\nAlready inside tmux. Please manually switch to the ticket directory:")
-              (do
-                (println (str "\nStarting tmux session: " session-name))
-                (let [tmux-result (tmux/switch-to-session session-name (str ticket-path))]
-                  (when-not (:success tmux-result)
-                    (println (str "Failed to start tmux session: " (:error tmux-result))))))))
-          (do
-            (println (str "Error: " (:error workspace-result)))
-            (System/exit 1)))))))
+      ;; Get current user info if auto-assign is enabled
+      (let [user-info (when (:auto-assign-self jira-config)
+                        (jira/get-user-info jira-config))
 
+            ;; Build the issue data
+            issue-data {:fields {:project {:key (:default-project jira-config)}
+                                 :summary summary
+                                 :issuetype {:name (:default-issue-type jira-config)}
+                                 :description ""}}
 
-(defn sync-docs-command
-  []
-  (println "Syncing documentation... (not implemented yet)"))
+            ;; Add assignee if auto-assign is enabled and we have user info
+            issue-data (if (and user-info (:accountId user-info))
+                         (assoc-in issue-data [:fields :assignee]
+                                   {:accountId (:accountId user-info)})
+                         issue-data)]
+
+        ;; Create the issue
+        (println "Creating story...")
+        (let [result (jira/create-issue jira-config issue-data)]
+          (if (:success result)
+            (let [issue-key (:key result)
+                  ;; Try to add to sprint if configured
+                  sprint-added? (when (:auto-add-to-sprint jira-config)
+                                  (when-let [board (jira/get-board-for-project
+                                                     jira-config
+                                                     (:default-project jira-config))]
+                                    (when-let [sprint (jira/get-current-sprint
+                                                        jira-config
+                                                        (:id board))]
+                                      (jira/add-issue-to-sprint
+                                        jira-config
+                                        (:id sprint)
+                                        issue-key))))]
+              (println (str "\n✓ Created " issue-key ": " summary))
+              (println (str "  Status: To Do"))
+              (when sprint-added?
+                (println "  Added to current sprint"))
+              (when user-info
+                (println (str "  Assigned to: " (:displayName user-info))))
+              (println (str "\nStart working: c work-on " issue-key)))
+            (do
+              (println (str "Error: " (:error result)))
+              (System/exit 1))))))))
 
 
 (defn dispatch-command
@@ -260,8 +273,7 @@
     "help" (println (help-text))
     "log" (log-command (first args))
     "pipe" (apply pipe-command args)
-    "work-on" (work-on-command (first args))
-    "sync-docs" (sync-docs-command)
+    ("quick-story" "qs") (quick-story-command (first args))
     (do
       (println (str "Unknown command: " command))
       (println)

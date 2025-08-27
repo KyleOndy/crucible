@@ -6,14 +6,17 @@
 (load-file "core/lib/config.clj")
 (load-file "core/lib/jira.clj")
 
+
 (require '[lib.config :as config]
          '[lib.jira :as jira])
 
-(defn test-jira-connection []
+
+(defn test-jira-connection
+  []
   (println "Loading configuration...")
   (let [config (config/load-config)
         jira-config (:jira config)]
-    
+
     ;; Check configuration
     (println "\nChecking Jira configuration...")
     (if-let [errors (config/validate-jira-config config)]
@@ -23,7 +26,7 @@
           (println (str "  - " error)))
         (System/exit 1))
       (println "✓ Configuration valid"))
-    
+
     ;; Test connection
     (println "\nTesting Jira connection...")
     (let [result (jira/test-connection jira-config)]
@@ -32,7 +35,7 @@
         (do
           (println (str "✗ " (:message result)))
           (System/exit 1))))
-    
+
     ;; Test ticket fetching if ticket ID provided
     (when-let [ticket-id (first *command-line-args*)]
       (println (str "\nFetching ticket " ticket-id "..."))
@@ -47,5 +50,6 @@
             (println (str "  Priority: " (:priority summary)))
             (println (str "  Assignee: " (:assignee summary))))
           (println (str "\n✗ Failed to fetch ticket: " (:error result))))))))
+
 
 (test-jira-connection)

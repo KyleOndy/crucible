@@ -1,6 +1,9 @@
 # generated with flake.nix
 .mcp.json
 
+# direnv cache (nix+direnv)
+.direnv/
+
 # REPL artifacts
 .nrepl-port
 .nrepl-pid

@@ -59,6 +59,25 @@ This approach allows seamless development while providing an optimal end-user ex
 - [Babashka](https://github.com/babashka/babashka) installed
 - Java 11+ (for development dependencies)
 
+### Quick Setup
+
+```bash
+# 1. Check your setup status (before alias exists)
+bb crucible setup-check
+
+# 2. Set up the 'c' alias for convenience
+alias c='bb crucible'
+# Add to your shell config file for persistence
+
+# 3. Verify setup (now using the alias!)
+c setup-check
+
+# 4. Start using Crucible
+c help
+```
+
+For detailed setup instructions including shell-specific configurations, see [docs/setup-guide.md](docs/setup-guide.md).
+
 ### Development Setup
 
 ```bash
@@ -66,11 +85,11 @@ This approach allows seamless development while providing an optimal end-user ex
 bb dev
 
 # View available commands
-bb crucible help
+c help  # or 'bb crucible help' before alias setup
 
 # Test basic functionality
-bb crucible log daily
-bb crucible work-on TEST-123
+c log daily
+c work-on TEST-123
 ```
 
 ### Command Output Logging
@@ -112,7 +131,7 @@ See `docs/cpipe-setup.md` for detailed setup instructions for bash, zsh, and fis
 - [ ] Configuration management
 - [ ] Basic command implementations
 
-📋 **Upcoming**: Ticket management, documentation sync, tmux integration
+📋 **Upcoming**: Ticket management, documentation sync
 
 See `core/TASKS.md` for detailed implementation roadmap.
 

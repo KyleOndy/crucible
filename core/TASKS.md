@@ -124,19 +124,13 @@ Implementation roadmap for Crucible - an AI-powered SRE productivity system buil
 - README.md contains ticket title, description, and metadata
 - Template is well-formatted and useful
 
-### Task 3.3: Tmux Integration ✅ COMPLETED
+### Task 3.3: Tmux Integration ❌ REMOVED
 
-**Priority:** High | **Estimated Time:** 2-3 hours | **Dependencies:** 3.2
+**Status:** Removed for simplification
 
-- [x] Create `core/lib/tmux.clj` for session management
-- [x] Implement tmux session creation/switching
-- [x] Set working directory in tmux sessions
-- [x] Handle existing sessions gracefully
-
-**Acceptance Criteria:**
-
-- `c work-on PROJ-1234` creates/switches to tmux session
-- Session starts in correct ticket directory
+- Tmux integration has been removed from the codebase
+- `c work-on PROJ-1234` now simply creates workspace and shows path
+- Users can manually navigate to ticket directories
 - Existing sessions are reused, not duplicated
 - Clean session naming convention
 
@@ -255,7 +249,6 @@ Implementation roadmap for Crucible - an AI-powered SRE productivity system buil
 
 - [ ] Slack integration (pending company policy review)
 - [ ] Automatic ticket archiving strategies
-- [ ] Advanced tmux layout customization
 - [ ] Full-text search beyond ripgrep
 - [ ] Time tracking integration
 - [ ] Git integration for ticket directories
@@ -270,7 +263,6 @@ Implementation roadmap for Crucible - an AI-powered SRE productivity system buil
 - [ ] Caching strategies for API calls
 - [ ] Offline mode support
 - [ ] Configuration file support (beyond env vars)
-- [ ] Better tmux session lifecycle management
 - [ ] Automated backup integration
 - [ ] Security audit for credential handling
 
@@ -295,6 +287,5 @@ Implementation roadmap for Crucible - an AI-powered SRE productivity system buil
 ### Testing Strategy
 
 - Test API integrations with real services early
-- Validate tmux integration across different environments
 - Test file operations with various permissions
 - Validate markdown processing with complex content

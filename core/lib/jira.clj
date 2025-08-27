@@ -1,6 +1,7 @@
 (ns lib.jira
   (:require
-    [clj-http.client :as http]
+    [babashka.http-client :as http]
+    [cheshire.core :as json]
     [clojure.string :as str]))
 
 
@@ -20,14 +21,14 @@
         default-opts {:headers {"Authorization" auth-header
                                 "Accept" "application/json"
                                 "Content-Type" "application/json"}
-                      :throw-exceptions false
-                      :as :json}
-        request-opts (merge default-opts opts)]
-    (case method
-      :get (http/get url request-opts)
-      :post (http/post url request-opts)
-      :put (http/put url request-opts)
-      :delete (http/delete url request-opts))))
+                      :throw false}
+        request-opts (merge default-opts opts)
+        response (case method
+                   :get (http/get url request-opts)
+                   :post (http/post url request-opts)
+                   :put (http/put url request-opts)
+                   :delete (http/delete url request-opts))]
+    (update response :body #(when % (json/parse-string % true)))))
 
 
 (defn parse-ticket-id
@@ -98,3 +99,88 @@
        :message (str "Connection failed: " (or (get-in response [:body :message])
                                                (:reason-phrase response)))
        :status (:status response)})))
+
+
+(defn get-user-info
+  "Get current user information"
+  [jira-config]
+  (let [response (jira-request jira-config :get "/myself")]
+    (when (= 200 (:status response))
+      (:body response))))
+
+
+(defn create-issue
+  "Create a new Jira issue"
+  [jira-config issue-data]
+  (let [response (jira-request jira-config :post "/issue" {:body (json/generate-string issue-data)})]
+    (cond
+      (= 201 (:status response))
+      {:success true
+       :data (:body response)
+       :key (get-in response [:body :key])
+       :id (get-in response [:body :id])}
+
+      (= 400 (:status response))
+      {:success false
+       :error (str "Invalid issue data: " (get-in response [:body :errors]))
+       :status (:status response)}
+
+      (= 401 (:status response))
+      {:success false
+       :error "Authentication failed. Check your Jira credentials."
+       :status (:status response)}
+
+      :else
+      {:success false
+       :error (str "Failed to create issue: " (or (get-in response [:body :errorMessages])
+                                                  (get-in response [:body :errors])
+                                                  (:reason-phrase response)))
+       :status (:status response)})))
+
+
+(defn get-current-sprint
+  "Get the active sprint for a board"
+  [jira-config board-id]
+  (let [agile-url (str (:base-url jira-config) "/rest/agile/1.0")
+        auth-header (make-auth-header (:username jira-config) (:api-token jira-config))
+        response (http/get
+                   (str agile-url "/board/" board-id "/sprint?state=active")
+                   {:headers {"Authorization" auth-header
+                              "Accept" "application/json"}
+                    :throw false})]
+    (when (= 200 (:status response))
+      (let [body (json/parse-string (:body response) true)
+            sprints (:values body)]
+        (first sprints)))))
+
+
+(defn get-board-for-project
+  "Get the board ID for a project (first matching board)"
+  [jira-config project-key]
+  (let [agile-url (str (:base-url jira-config) "/rest/agile/1.0")
+        auth-header (make-auth-header (:username jira-config) (:api-token jira-config))
+        response (http/get
+                   (str agile-url "/board?projectKeyOrId=" project-key)
+                   {:headers {"Authorization" auth-header
+                              "Accept" "application/json"}
+                    :throw false})]
+    (when (= 200 (:status response))
+      (let [body (json/parse-string (:body response) true)
+            boards (:values body)]
+        (first boards)))))
+
+
+(defn add-issue-to-sprint
+  "Add an issue to a sprint"
+  [jira-config sprint-id issue-key]
+  (let [agile-url (str (:base-url jira-config) "/rest/agile/1.0")
+        auth-header (make-auth-header (:username jira-config) (:api-token jira-config))
+        body-data {:issues [issue-key]}
+        response (http/post
+                   (str agile-url "/sprint/" sprint-id "/issue")
+                   {:headers {"Authorization" auth-header
+                              "Accept" "application/json"
+                              "Content-Type" "application/json"}
+                    :body (json/generate-string body-data)
+                    :throw false})]
+    (= 204 (:status response))))

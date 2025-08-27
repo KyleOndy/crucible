@@ -1,0 +1,231 @@
+# Crucible Setup Guide
+
+This guide walks you through setting up Crucible for daily productivity workflows.
+
+## Available Commands
+
+Crucible provides 4 core commands:
+
+- `help` - Show command help
+- `log daily` - Open today's daily log in your editor
+- `pipe [command]` - Pipe stdin to daily log (optionally log the command)
+- `qs <summary>` - Create a quick Jira story
+
+## Quick Start
+
+### 1. Set Up the `c` Alias
+
+The `c` alias makes Crucible commands much more convenient to type.
+
+#### Bash
+
+Add to your `~/.bashrc` or `~/.bash_profile`:
+
+```bash
+# Crucible alias
+alias c='bb crucible'
+
+# Optional: cpipe function for automatic command logging
+cpipe() {
+    eval "$*" | c pipe "$*"
+}
+```
+
+Then reload:
+
+```bash
+source ~/.bashrc
+```
+
+#### Zsh
+
+Add to your `~/.zshrc`:
+
+```zsh
+# Crucible alias
+alias c='bb crucible'
+
+# Optional: cpipe function for automatic command logging
+cpipe() {
+    eval "$*" | c pipe "$*"
+}
+```
+
+Then reload:
+
+```zsh
+source ~/.zshrc
+```
+
+#### Fish
+
+Add to your Fish config or run these commands:
+
+```fish
+# Crucible alias (Fish doesn't use alias for functions with arguments)
+# Create ~/.config/fish/functions/c.fish
+function c
+    bb crucible $argv
+end
+
+# Optional: cpipe function - create ~/.config/fish/functions/cpipe.fish
+function cpipe
+    eval $argv | c pipe "$argv"
+end
+```
+
+Fish functions are automatically loaded, no reload needed.
+
+### 2. Configure Jira (Required for `qs` command)
+
+Create a configuration file at `~/.config/crucible/config.edn` or `crucible.edn` in your project:
+
+```clojure
+{:jira {:base-url "https://yourcompany.atlassian.net"
+        :username "your-email@company.com"
+        :api-token "your-api-token"
+        :default-project "PROJ"
+        :default-issue-type "Task"
+        :auto-assign-self true
+        :auto-add-to-sprint true}}
+```
+
+#### Environment Variables (Alternative)
+
+You can also use environment variables:
+
+```bash
+export CRUCIBLE_JIRA_URL="https://yourcompany.atlassian.net"
+export CRUCIBLE_JIRA_USER="your-email@company.com"
+export CRUCIBLE_JIRA_TOKEN="your-api-token"
+```
+
+### 3. Set Your Editor
+
+Make sure your `$EDITOR` environment variable is set:
+
+```bash
+export EDITOR=vim    # or nano, emacs, code, etc.
+```
+
+## Required Dependencies
+
+### Core Requirements
+
+1. **Babashka** - Clojure scripting runtime
+   - Install from: https://github.com/babashka/babashka#installation
+   - Nix: `nix-env -iA nixpkgs.babashka`
+
+2. **Text Editor** - For daily log editing
+   - Set in shell config: `export EDITOR=vim` (or `nvim`, `emacs`, etc.)
+
+### Optional but Recommended
+
+1. **cpipe function** - For automatic command logging
+   - See shell-specific instructions above
+
+2. **Workspace directory** - Will be created automatically
+   - Default location: `./workspace/` in the Crucible directory
+
+## Command Usage After Setup
+
+### Daily Log Management
+
+```bash
+# Open today's daily log
+c log daily
+
+# Pipe command output to daily log
+kubectl get pods | c pipe "kubectl get pods"
+
+# Use cpipe for automatic logging
+cpipe "ls -la"
+cpipe "docker ps"
+```
+
+### Jira Integration
+
+```bash
+# Create a quick story
+c qs "Fix authentication timeout"
+c quick-story "Add API rate limiting"
+```
+
+### Getting Help
+
+```bash
+# Show all commands
+c help
+```
+
+## Advanced Configuration
+
+### Password Manager Integration
+
+Any config value can use the `pass:` prefix to fetch from the pass password manager:
+
+```clojure
+{:jira {:api-token "pass:work/jira-token"}}
+```
+
+### Workspace Configuration
+
+Customize where files are stored:
+
+```clojure
+{:workspace {:root-dir "~/crucible-workspace"
+             :logs-dir "logs"
+             :docs-dir "docs"}}
+```
+
+### Configuration Loading Order
+
+Configuration is loaded from (later overrides earlier):
+
+1. Built-in defaults
+2. `~/.config/crucible/config.edn` or `~/.crucible/config.edn` (user config)
+3. `./crucible.edn` (project-specific config)
+4. Environment variables (`CRUCIBLE_*`)
+5. Password manager resolution (for `pass:` prefixed values)
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Command not found: bb**
+   - Install Babashka: https://github.com/babashka/babashka#installation
+
+2. **Jira authentication errors**
+   - Check your API token is valid
+   - Verify your Jira URL is correct
+   - Ensure your username/email is correct
+
+3. **Editor not opening for daily log**
+   - Set `$EDITOR` environment variable: `export EDITOR=nano`
+   - Add to your shell config file for persistence
+
+4. **Workspace permissions**
+   - Crucible will create the workspace directory automatically
+   - Check write permissions in the current directory
+
+### Testing Your Setup
+
+```bash
+# Test basic functionality
+c help
+
+# Test daily log (should open your editor)
+c log daily
+
+# Test pipe functionality
+echo "test" | c pipe "echo test"
+
+# Test Jira integration (requires configuration)
+c qs "Test story"
+```
+
+## Getting More Help
+
+- Run `c help` to see all available commands
+- Check out `docs/cpipe-setup.md` for advanced cpipe configurations
+- Configuration examples are in `crucible.edn.example`

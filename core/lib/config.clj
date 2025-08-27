@@ -9,21 +9,19 @@
 (def default-config
   {:jira {:base-url nil
           :username nil
-          :api-token nil}
+          :api-token nil
+          :default-project nil
+          :default-issue-type "Task"
+          :default-story-points 1
+          :auto-assign-self true
+          :auto-add-to-sprint true}
 
-   :confluence {:base-url nil
-                :username nil
-                :api-token nil}
 
    :workspace {:root-dir "workspace"
                :logs-dir "logs"
-               :tickets-dir "tickets"
                :docs-dir "docs"}
 
-   :editor nil
-
-   :tmux {:session-prefix "crucible-"
-          :default-layout "main-vertical"}})
+   :editor nil})
 
 
 (defn expand-path
@@ -83,10 +81,15 @@
 
 
 (defn load-home-config
-  "Load config from user's home directory"
+  "Load config from user's home directory (tries XDG and legacy locations)"
   []
-  (let [home-config-path (fs/path (System/getProperty "user.home") ".crucible" "config.edn")]
-    (load-edn-file home-config-path)))
+  (let [xdg-config-home (or (System/getenv "XDG_CONFIG_HOME")
+                            (str (System/getProperty "user.home") "/.config"))
+        xdg-config-path (fs/path xdg-config-home "crucible" "config.edn")
+        legacy-config-path (fs/path (System/getProperty "user.home") ".crucible" "config.edn")]
+    ;; Try XDG location first, then fall back to legacy location
+    (or (load-edn-file xdg-config-path)
+        (load-edn-file legacy-config-path))))
 
 
 (defn load-project-config
@@ -104,11 +107,6 @@
             :username (get env-map "CRUCIBLE_JIRA_USER")
             :api-token (get env-map "CRUCIBLE_JIRA_TOKEN")
             nil)
-    :confluence (case (first path-rest)
-                  :base-url (get env-map "CRUCIBLE_CONFLUENCE_URL")
-                  :username (get env-map "CRUCIBLE_CONFLUENCE_USER")
-                  :api-token (get env-map "CRUCIBLE_CONFLUENCE_TOKEN")
-                  nil)
     :workspace (when (= (first path-rest) :root-dir)
                  (get env-map "CRUCIBLE_WORKSPACE_DIR"))
     :editor (get env-map "EDITOR")
@@ -123,9 +121,6 @@
         (update-in [:jira :base-url] #(or (get-env-override env-map [:jira :base-url]) %))
         (update-in [:jira :username] #(or (get-env-override env-map [:jira :username]) %))
         (update-in [:jira :api-token] #(or (get-env-override env-map [:jira :api-token]) %))
-        (update-in [:confluence :base-url] #(or (get-env-override env-map [:confluence :base-url]) %))
-        (update-in [:confluence :username] #(or (get-env-override env-map [:confluence :username]) %))
-        (update-in [:confluence :api-token] #(or (get-env-override env-map [:confluence :api-token]) %))
         (update-in [:workspace :root-dir] #(or (get-env-override env-map [:workspace :root-dir]) %))
         (update [:editor] #(or (get-env-override env-map [:editor]) %)))))
 
@@ -169,29 +164,12 @@
       errors)))
 
 
-(defn validate-confluence-config
-  "Validate that required Confluence configuration is present"
-  [config]
-  (let [conf-config (:confluence config)
-        errors (cond-> []
-                 (not (:base-url conf-config))
-                 (conj "Missing Confluence base URL (set in config file or CRUCIBLE_CONFLUENCE_URL)")
-
-                 (not (:username conf-config))
-                 (conj "Missing Confluence username (set in config file or CRUCIBLE_CONFLUENCE_USER)")
-
-                 (not (:api-token conf-config))
-                 (conj "Missing Confluence API token (set in config file or CRUCIBLE_CONFLUENCE_TOKEN)"))]
-    (when (seq errors)
-      errors)))
-
-
 (defn config-locations
   "Return a string describing where config files are loaded from"
   []
   (str "Configuration is loaded from (in order of precedence):\n"
        "  1. ./crucible.edn (project-specific)\n"
-       "  2. ~/.crucible/config.edn (user config)\n"
+       "  2. ~/.config/crucible/config.edn or ~/.crucible/config.edn (user config)\n"
        "  3. Environment variables (CRUCIBLE_*)\n"
        "  4. Built-in defaults"))
 
