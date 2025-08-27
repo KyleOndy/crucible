@@ -13,68 +13,34 @@ Crucible provides 4 core commands:
 
 ## Quick Start
 
-### 1. Set Up the `c` Alias
+### 1. Install Global Command
 
-The `c` alias makes Crucible commands much more convenient to type.
-
-#### Bash
-
-Add to your `~/.bashrc` or `~/.bash_profile`:
+Run the setup script to install the `c` command globally:
 
 ```bash
-# Crucible alias
-alias c='bb crucible'
+./setup.sh
+```
 
+This creates a global `c` wrapper that works from anywhere on your system. No shell aliases needed.
+
+#### Optional: cpipe function for automatic command logging
+
+Add to your shell config (`~/.bashrc`, `~/.zshrc`, etc.):
+
+```bash
 # Optional: cpipe function for automatic command logging
 cpipe() {
     eval "$*" | c pipe "$*"
 }
 ```
 
-Then reload:
-
-```bash
-source ~/.bashrc
-```
-
-#### Zsh
-
-Add to your `~/.zshrc`:
-
-```zsh
-# Crucible alias
-alias c='bb crucible'
-
-# Optional: cpipe function for automatic command logging
-cpipe() {
-    eval "$*" | c pipe "$*"
-}
-```
-
-Then reload:
-
-```zsh
-source ~/.zshrc
-```
-
-#### Fish
-
-Add to your Fish config or run these commands:
+For Fish shell, create `~/.config/fish/functions/cpipe.fish`:
 
 ```fish
-# Crucible alias (Fish doesn't use alias for functions with arguments)
-# Create ~/.config/fish/functions/c.fish
-function c
-    bb crucible $argv
-end
-
-# Optional: cpipe function - create ~/.config/fish/functions/cpipe.fish
 function cpipe
     eval $argv | c pipe "$argv"
 end
 ```
-
-Fish functions are automatically loaded, no reload needed.
 
 ### 2. Configure Jira (Required for `qs` command)
 
@@ -122,12 +88,14 @@ export EDITOR=vim    # or nano, emacs, code, etc.
 ### Optional but Recommended
 
 1. **cpipe function** - For automatic command logging
-   - See shell-specific instructions above
+   - See setup instructions above
 
 2. **Workspace directory** - Will be created automatically
    - Default location: `./workspace/` in the Crucible directory
 
-## Command Usage After Setup
+## Command Usage
+
+After running `./setup.sh`, you can use `c` commands from anywhere:
 
 ### Daily Log Management
 

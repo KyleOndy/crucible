@@ -11,7 +11,8 @@ Implementation roadmap for Crucible - an AI-powered SRE productivity system buil
 - [x] Create main CLI dispatcher in `core/bin/crucible.clj`
 - [x] Set up command routing using babashka.cli
 - [x] Implement basic help system
-- [x] Create shell alias setup instructions
+- [x] Create global setup script for system-wide access
+- [x] Update documentation to use setup script instead of shell aliases
 
 **Acceptance Criteria:**
 
@@ -19,6 +20,14 @@ Implementation roadmap for Crucible - an AI-powered SRE productivity system buil
 - Command routing works for subcommands
 - Error handling for unknown commands
 - Clean exit codes
+- Global `c` command works from any directory after running `./setup.sh`
+
+**Implementation Notes:**
+
+- Replaced shell alias approach with global wrapper script
+- Created `setup.sh` that detects appropriate install location (`~/bin` or `~/.local/bin`)
+- Updated `docs/setup-guide.md` and help text to reflect new setup process
+- No shell configuration required - just run `./setup.sh` once per workstation
 
 ### Task 1.3: Configuration Management ✅ COMPLETED
 

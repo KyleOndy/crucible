@@ -30,8 +30,7 @@
 (defn help-text
   []
   (str "Crucible - AI-powered SRE productivity system\n\n"
-       "Usage: c <command> [options]  (after setup)\n"
-       "       bb crucible <command> [options]  (before alias setup)\n\n"
+       "Usage: c <command> [options]\n\n"
        "Commands:\n"
        "  help              Show this help\n"
        "  log daily         Open today's daily log\n"
@@ -39,10 +38,9 @@
        "  quick-story <summary>  Create a quick Jira story\n"
        "  qs <summary>      Alias for quick-story\n\n"
        "Quick Setup:\n"
-       "  1. Add alias: alias c='bb crucible'\n"
-       "  2. Add to shell config for persistence\n"
-       "  3. See docs/setup-guide.md for detailed instructions\n\n"
-       "Use 'bb <command>' for convenience aliases:\n"
+       "  1. Run: ./setup.sh\n"
+       "  2. See docs/setup-guide.md for detailed instructions\n\n"
+       "Use 'bb <command>' for convenience aliases (from crucible directory):\n"
        "  bb l              Alias for 'c log daily'\n"
        "  bb pipe           Alias for 'c pipe'\n"
        "  bb qs <summary>   Alias for 'c quick-story'\n\n"
@@ -60,9 +58,8 @@
        "For automatic command logging, add this function to your shell profile:\n"
        "  cpipe() { eval \"$*\" | c pipe \"$*\"; }\n"
        "Then use: cpipe kubectl get pods\n\n"
-       "Setup Instructions:\n"
-       "  Bash: Add to ~/.bashrc or ~/.bash_profile\n"
-       "  Zsh:  Add to ~/.zshrc\n"
+       "cpipe Setup Instructions:\n"
+       "  Bash/Zsh: Add cpipe function to ~/.bashrc or ~/.zshrc\n"
        "  Fish: Add 'function cpipe; eval $argv | c pipe \"$argv\"; end' to ~/.config/fish/functions/cpipe.fish\n"
        "  Then restart your shell or run: source ~/.bashrc (or ~/.zshrc)\n"))
 
