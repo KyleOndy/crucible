@@ -33,6 +33,7 @@
        "Usage: c <command> [options]\n\n"
        "Commands:\n"
        "  help              Show this help\n"
+       "  l                 Open today's daily log (alias for 'log daily')\n"
        "  log daily         Open today's daily log\n"
        "  pipe [command]    Pipe stdin to daily log (optionally log the command)\n"
        "  quick-story <summary>  Create a quick Jira story\n"
@@ -268,7 +269,9 @@
   [command args]
   (case command
     "help" (println (help-text))
-    "log" (log-command (first args))
+    ("log" "l") (if (or (= command "l") (nil? (first args)))
+                  (open-daily-log)
+                  (log-command (first args)))
     "pipe" (apply pipe-command args)
     ("quick-story" "qs") (quick-story-command (first args))
     (do

@@ -3,23 +3,23 @@
 
 # Detect where to install the wrapper
 if [[ ":$PATH:" == *":$HOME/bin:"* ]] && mkdir -p "$HOME/bin" 2>/dev/null; then
-    INSTALL_DIR="$HOME/bin"
+	INSTALL_DIR="$HOME/bin"
 elif [[ ":$PATH:" == *":$HOME/.local/bin:"* ]] && mkdir -p "$HOME/.local/bin" 2>/dev/null; then
-    INSTALL_DIR="$HOME/.local/bin"
+	INSTALL_DIR="$HOME/.local/bin"
 else
-    echo "Error: No writable directory found in PATH"
-    echo "Common locations to add to PATH:"
-    echo "  - $HOME/bin"
-    echo "  - $HOME/.local/bin"
-    echo "Please create one of these directories and add it to your PATH"
-    exit 1
+	echo "Error: No writable directory found in PATH"
+	echo "Common locations to add to PATH:"
+	echo "  - $HOME/bin"
+	echo "  - $HOME/.local/bin"
+	echo "Please create one of these directories and add it to your PATH"
+	exit 1
 fi
 
 # Get the absolute path to crucible directory
 CRUCIBLE_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Create the wrapper script
-cat > "$INSTALL_DIR/c" << EOF
+cat >"$INSTALL_DIR/c" <<EOF
 #!/usr/bin/env bash
 cd "$CRUCIBLE_DIR" && bb crucible "\$@"
 EOF

@@ -4,9 +4,10 @@ This guide walks you through setting up Crucible for daily productivity workflow
 
 ## Available Commands
 
-Crucible provides 4 core commands:
+Crucible provides these core commands:
 
 - `help` - Show command help
+- `l` - Open today's daily log in your editor (shortcut)
 - `log daily` - Open today's daily log in your editor
 - `pipe [command]` - Pipe stdin to daily log (optionally log the command)
 - `qs <summary>` - Create a quick Jira story
@@ -100,7 +101,10 @@ After running `./setup.sh`, you can use `c` commands from anywhere:
 ### Daily Log Management
 
 ```bash
-# Open today's daily log
+# Open today's daily log (shortcut)
+c l
+
+# Open today's daily log (full command)
 c log daily
 
 # Pipe command output to daily log
