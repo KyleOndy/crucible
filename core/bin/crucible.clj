@@ -4,28 +4,25 @@
 (load-file "core/lib/config.clj")
 (load-file "core/lib/jira.clj")
 
-
 (ns crucible
   (:require
-    [babashka.fs :as fs]
-    [babashka.process :as process]
-    [clojure.string :as str]
-    [lib.config :as config]
-    [lib.jira :as jira])
+   [babashka.fs :as fs]
+   [babashka.process :as process]
+   [clojure.string :as str]
+   [lib.config :as config]
+   [lib.jira :as jira])
   (:import
-    (java.time
-      LocalDate
-      LocalDateTime)
-    (java.time.format
-      DateTimeFormatter)
-    (java.util
-      Locale)))
-
+   (java.time
+    LocalDate
+    LocalDateTime)
+   (java.time.format
+    DateTimeFormatter)
+   (java.util
+    Locale)))
 
 (def cli-spec
   {:help {:desc "Show help"
           :alias :h}})
-
 
 (defn help-text
   []
@@ -64,7 +61,6 @@
        "  Fish: Add 'function cpipe; eval $argv | c pipe \"$argv\"; end' to ~/.config/fish/functions/cpipe.fish\n"
        "  Then restart your shell or run: source ~/.bashrc (or ~/.zshrc)\n"))
 
-
 (defn get-date-info
   "Returns map with formatted date information for template substitution"
   []
@@ -75,7 +71,6 @@
      :day-name (.format today day-formatter)
      :full-date (.format today full-formatter)}))
 
-
 (defn process-template
   "Replace template variables with actual values"
   [template-content date-info]
@@ -83,7 +78,6 @@
       (str/replace "{{DATE}}" (:date date-info))
       (str/replace "{{DAY_NAME}}" (:day-name date-info))
       (str/replace "{{FULL_DATE}}" (:full-date date-info))))
-
 
 (defn ensure-log-directory
   "Create workspace/logs/daily directory if it doesn't exist"
@@ -93,7 +87,6 @@
       (fs/create-dirs log-dir))
     log-dir))
 
-
 (defn get-daily-log-path
   "Get the path for today's daily log file"
   []
@@ -101,7 +94,6 @@
         date-info (get-date-info)
         filename (str (:date date-info) ".md")]
     (fs/path log-dir filename)))
-
 
 (defn create-daily-log-from-template
   "Create daily log file from template if it doesn't exist"
@@ -115,7 +107,6 @@
           (spit (str log-path) processed-content))
         ;; Fallback if template doesn't exist
         (spit (str log-path) (str "# " (:full-date date-info) " - Daily Log\n\n"))))))
-
 
 (defn launch-editor
   "Launch editor with the given file path"
@@ -132,7 +123,6 @@
         (println "Please set $EDITOR to your preferred text editor (e.g., export EDITOR=nano)")
         (System/exit 1)))))
 
-
 (defn open-daily-log
   "Open today's daily log in the configured editor"
   []
@@ -140,18 +130,100 @@
     (create-daily-log-from-template log-path)
     (launch-editor log-path)))
 
-
 (defn log-command
   [subcommand]
   (case subcommand
     "daily" (open-daily-log)
     (println (str "Unknown log subcommand: " subcommand))))
 
+(defn get-parent-command-java
+  "Use Java ProcessHandle API to detect parent command (cross-platform)"
+  []
+  (try
+    (let [current-handle (java.lang.ProcessHandle/current)
+          parent-handle (.parent current-handle)]
+      (when (.isPresent parent-handle)
+        (let [parent (.get parent-handle)
+              info (.info parent)
+              command-line (.commandLine info)]
+          (when (.isPresent command-line)
+            (let [full-cmd (.get command-line)]
+              ;; Extract just the command that's piping, not the full shell invocation
+              (if (str/includes? full-cmd " | ")
+                ;; If it's a pipeline, extract the part before the pipe
+                (let [pipe-parts (str/split full-cmd #" \| ")
+                      sending-command (str/trim (first pipe-parts))]
+                  ;; Remove "bash -c" wrapper if present
+                  ;; Remove shell wrapper if present and clean up
+                  (let [cleaned-command (cond
+                                          ;; Handle "bash -c command" format
+                                          (str/starts-with? sending-command "bash -c ")
+                                          (str/trim (str/replace sending-command "bash -c " ""))
+                                          ;; Handle full path bash commands
+                                          (re-find #"/bin/bash -c (.+)" sending-command)
+                                          (str/trim (second (re-find #"/bin/bash -c (.+)" sending-command)))
+                                          ;; Return as-is if no wrapper detected
+                                          :else sending-command)]
+                    cleaned-command))
+                nil))))))
+    (catch Exception _
+      nil)))
+
+(defn get-parent-command-ps
+  "Try to detect the command that's piping data to us using ps (fallback method)"
+  []
+  (try
+    (let [current-pid (.pid (java.lang.ProcessHandle/current))
+          ppid (-> (process/shell {:out :string} (str "ps -o ppid= -p " current-pid))
+                   :out
+                   str/trim)
+          parent-cmd (when (not (str/blank? ppid))
+                       (-> (process/shell {:out :string} (str "ps -o args= -p " ppid))
+                           :out
+                           str/trim))]
+      (when parent-cmd
+        ;; Extract just the command that's piping, not the full shell invocation
+        (if (str/includes? parent-cmd " | ")
+          ;; If it's a pipeline, extract the part before the pipe
+          (let [pipe-parts (str/split parent-cmd #" \| ")
+                sending-command (str/trim (first pipe-parts))]
+            ;; Remove "bash -c" wrapper if present
+            ;; Remove shell wrapper if present and clean up
+            (let [cleaned-command (cond
+                                    ;; Handle "bash -c command" format
+                                    (str/starts-with? sending-command "bash -c ")
+                                    (str/trim (str/replace sending-command "bash -c " ""))
+                                    ;; Handle full path bash commands
+                                    (re-find #"/bin/bash -c (.+)" sending-command)
+                                    (str/trim (second (re-find #"/bin/bash -c (.+)" sending-command)))
+                                    ;; Return as-is if no wrapper detected
+                                    :else sending-command)]
+              cleaned-command))
+          nil)))
+    (catch Exception _
+      nil)))
+
+(defn get-parent-command
+  "Unified parent command detection with fallback strategy"
+  []
+  (let [java-result (get-parent-command-java)
+        ps-result (when-not java-result (get-parent-command-ps))]
+    {:command (or java-result ps-result)
+     :method (cond
+               java-result :processhandle
+               ps-result :ps
+               :else :none)}))
 
 (defn pipe-command
   [& args]
   (let [stdin-content (slurp *in*)
-        command-str (first args)]
+        explicit-command (first args)
+        detection-result (when (and (not explicit-command)
+                                    (not (str/blank? stdin-content)))
+                           (get-parent-command))
+        detected-command (:command detection-result)
+        detection-method (:method detection-result)
+        command-str (or explicit-command detected-command)]
     (if (str/blank? stdin-content)
       (println "No input received from stdin")
       (let [log-path (get-daily-log-path)
@@ -159,10 +231,16 @@
             time-formatter (DateTimeFormatter/ofPattern "HH:mm:ss")
             formatted-time (.format timestamp time-formatter)
             working-dir (System/getProperty "user.dir")
+            method-text (case detection-method
+                          :processhandle "(auto-detected via ProcessHandle)\n"
+                          :ps "(auto-detected via ps)\n"
+                          :none ""
+                          nil "")
             header-text (if command-str
                           (str "### Command output at " formatted-time "\n"
                                "Working directory: " working-dir "\n"
-                               "Command: `" command-str "`\n")
+                               "Command: `" command-str "`\n"
+                               (when detected-command method-text))
                           (str "### Command output at " formatted-time "\n"
                                "Working directory: " working-dir "\n"))
             content-to-append (str "\n" header-text "\n"
@@ -194,8 +272,18 @@
               (spit (str log-path) new-content))
             ;; Fallback to appending at the end if section not found
             (spit (str log-path) content-to-append :append true)))
-        (println (str "✓ Output piped to " log-path))))))
-
+        ;; Enhanced logging with detection method
+        (cond
+          detected-command
+          (let [method-name (case detection-method
+                              :processhandle "ProcessHandle"
+                              :ps "ps"
+                              :none "unknown"
+                              nil "unknown"
+                              "unknown")]
+            (println (str "✓ Output piped to " log-path " (detected via " method-name ": " detected-command ")")))
+          :else
+          (println (str "✓ Output piped to " log-path)))))))
 
 (defn quick-story-command
   "Create a quick Jira story with minimal input"
@@ -244,15 +332,15 @@
                   ;; Try to add to sprint if configured
                   sprint-added? (when (:auto-add-to-sprint jira-config)
                                   (when-let [board (jira/get-board-for-project
-                                                     jira-config
-                                                     (:default-project jira-config))]
+                                                    jira-config
+                                                    (:default-project jira-config))]
                                     (when-let [sprint (jira/get-current-sprint
-                                                        jira-config
-                                                        (:id board))]
+                                                       jira-config
+                                                       (:id board))]
                                       (jira/add-issue-to-sprint
-                                        jira-config
-                                        (:id sprint)
-                                        issue-key))))]
+                                       jira-config
+                                       (:id sprint)
+                                       issue-key))))]
               (println (str "\n✓ Created " issue-key ": " summary))
               (println (str "  Status: To Do"))
               (when sprint-added?
@@ -263,7 +351,6 @@
             (do
               (println (str "Error: " (:error result)))
               (System/exit 1))))))))
-
 
 (defn dispatch-command
   [command args]
@@ -280,7 +367,6 @@
       (println (help-text))
       (System/exit 1))))
 
-
 (defn -main
   [& args]
   (let [command (first args)
@@ -289,7 +375,6 @@
       (or (= command "help") (= command "-h") (= command "--help")) (println (help-text))
       (or (empty? args) (nil? command)) (println (help-text))
       :else (dispatch-command command remaining-args))))
-
 
 ;; For bb execution
 ;; For bb execution
