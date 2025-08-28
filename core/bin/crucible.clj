@@ -30,6 +30,7 @@
        "Usage: c <command> [options]\n\n"
        "Commands:\n"
        "  help              Show this help\n"
+       "  jira-check [ticket]  Check Jira configuration and connectivity\n"
        "  l                 Open today's daily log (alias for 'log daily')\n"
        "  log daily         Open today's daily log\n"
        "  pipe [command]    Pipe stdin to daily log (optionally log the command)\n"
@@ -37,14 +38,18 @@
        "  qs <summary>      Alias for quick-story\n\n"
        "Quick Setup:\n"
        "  1. Run: ./setup.sh\n"
-       "  2. See docs/setup-guide.md for detailed instructions\n\n"
+       "  2. See docs/setup-guide.md for detailed instructions\n"
+       "  3. Test Jira integration: c jira-check\n\n"
        "Use 'bb <command>' for convenience aliases (from crucible directory):\n"
+       "  bb jira-check     Alias for 'c jira-check'\n"
        "  bb l              Alias for 'c log daily'\n"
        "  bb pipe           Alias for 'c pipe'\n"
        "  bb qs <summary>   Alias for 'c quick-story'\n\n"
-       "Quick Story Examples:\n"
-       "  c qs \"Fix login timeout issue\"\n"
-       "  c quick-story \"Add rate limiting to API\"\n\n"
+       "Jira Examples:\n"
+       "  c jira-check                      Test your Jira configuration\n"
+       "  c jira-check PROJ-1234           Test with a specific ticket\n"
+       "  c qs \"Fix login timeout issue\"    Create a quick story\n"
+       "  c quick-story \"Add rate limiting\"  Create a story with full command\n\n"
        "Pipe Examples:\n"
        "  kubectl get pods | c pipe\n"
        "  ls -la | c pipe \"ls -la\"\n"
@@ -59,7 +64,10 @@
        "cpipe Setup Instructions:\n"
        "  Bash/Zsh: Add cpipe function to ~/.bashrc or ~/.zshrc\n"
        "  Fish: Add 'function cpipe; eval $argv | c pipe \"$argv\"; end' to ~/.config/fish/functions/cpipe.fish\n"
-       "  Then restart your shell or run: source ~/.bashrc (or ~/.zshrc)\n"))
+       "  Then restart your shell or run: source ~/.bashrc (or ~/.zshrc)\n\n"
+       "Documentation:\n"
+       "  docs/jira-guide.md    Complete Jira setup and usage guide\n"
+       "  docs/setup-guide.md   System setup and configuration\n"))
 
 (defn get-date-info
   "Returns map with formatted date information for template substitution"
@@ -361,6 +369,7 @@
                   (log-command (first args)))
     "pipe" (apply pipe-command args)
     ("quick-story" "qs") (quick-story-command (first args))
+    "jira-check" (apply jira/run-jira-check args)
     (do
       (println (str "Unknown command: " command))
       (println)

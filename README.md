@@ -74,9 +74,13 @@ c setup-check
 
 # 4. Start using Crucible
 c help
+
+# 5. Set up Jira integration (optional)
+c jira-check  # Test your Jira configuration
 ```
 
 For detailed setup instructions including shell-specific configurations, see [docs/setup-guide.md](docs/setup-guide.md).
+For Jira integration setup and usage, see [docs/jira-guide.md](docs/jira-guide.md).
 
 ### Development Setup
 
@@ -114,6 +118,29 @@ cpipe "kubectl get pods | grep Running"
 
 The `cpipe` function automatically executes commands and logs both the command and output to your daily log.
 See `docs/cpipe-setup.md` for detailed setup instructions for bash, zsh, and fish shells.
+
+### Jira Integration
+
+Crucible includes powerful Jira integration for streamlined ticket management:
+
+```bash
+# Test your Jira configuration
+c jira-check
+c jira-check PROJ-1234  # Test with a specific ticket
+
+# Create quick tickets
+c qs "Fix authentication timeout"
+c quick-story "Implement user dashboard"
+```
+
+**Key Features:**
+- **Configuration Testing**: Comprehensive validation with helpful error messages
+- **Quick Ticket Creation**: Create tickets with minimal input
+- **Auto-Assignment**: Automatically assign new tickets to yourself
+- **Sprint Integration**: Add tickets to current active sprint
+- **Secure Authentication**: Support for pass password manager integration
+
+For complete setup instructions, configuration options, and troubleshooting, see [docs/jira-guide.md](docs/jira-guide.md).
 
 ## Current Status
 

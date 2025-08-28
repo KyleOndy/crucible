@@ -19,15 +19,15 @@
                                   :shutdown p/destroy-tree}
                                  "bb" "-e"
                                  (pr-str (list 'do
-                                            '(require '[babashka.nrepl.server :as srv])
-                                            (list 'let ['server (list 'srv/start-server! {:host "localhost"
-                                                                                          :port port})]
-                                              (list 'spit ".nrepl-port" (str port))
-                                              '(spit ".nrepl-pid" (str (.pid (java.lang.ProcessHandle/current))))
-                                              (list 'println (str "nREPL server started on port " port))
-                                              '(println "Port written to .nrepl-port file")
-                                              '(println "PID written to .nrepl-pid file")
-                                              '(deref (promise))))))]
+                                               '(require '[babashka.nrepl.server :as srv])
+                                               (list 'let ['server (list 'srv/start-server! {:host "localhost"
+                                                                                             :port port})]
+                                                     (list 'spit ".nrepl-port" (str port))
+                                                     '(spit ".nrepl-pid" (str (.pid (java.lang.ProcessHandle/current))))
+                                                     (list 'println (str "nREPL server started on port " port))
+                                                     '(println "Port written to .nrepl-port file")
+                                                     '(println "PID written to .nrepl-pid file")
+                                                     '(deref (promise))))))]
              (Thread/sleep 1000) ; Give server time to start
              (if (fs/exists? ".nrepl-port")
                (do
@@ -92,4 +92,8 @@
   {:doc "Create a quick Jira story (alias for: crucible quick-story)"
    :task (if-let [summary (first *command-line-args*)]
            (shell "bb" "crucible" "qs" summary)
-           (println "Usage: bb qs \"Story summary\""))}}}
+           (println "Usage: bb qs \"Story summary\""))}
+
+  jira-check
+  {:doc "Check Jira configuration and connectivity (alias for: crucible jira-check)"
+   :task (apply shell "bb" "crucible" "jira-check" *command-line-args*)}}}
