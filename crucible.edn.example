@@ -19,6 +19,7 @@
  ;; All paths support ~ for home directory expansion
  :workspace {:root-dir "workspace"      ; or absolute path like "~/work/crucible-workspace"
              :logs-dir "logs"           ; relative to root-dir
+             :tickets-dir "tickets"     ; relative to root-dir
              :docs-dir "docs"}          ; relative to root-dir
  
  ;; Editor fallback (used if $EDITOR environment variable not set)
