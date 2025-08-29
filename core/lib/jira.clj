@@ -149,6 +149,189 @@
                    :throw false})]
     (= 204 (:status response))))
 
+(defn parse-inline-formatting
+  "Parse inline markdown formatting (bold, italic, code, links) in text"
+  [text]
+  (if (str/blank? text)
+    []
+    (let [;; Find matches for each pattern type, avoiding overlaps within each type
+          find-all-matches (fn [pattern type text]
+                             (let [matcher (re-matcher pattern text)
+                                   matches (atom [])]
+                               (while (.find matcher)
+                                 (let [start (.start matcher)
+                                       end (.end matcher)
+                                       full-match (.group matcher)
+                                       inner-text (if (> (.groupCount matcher) 0)
+                                                    (.group matcher 1)
+                                                    full-match)
+                                       ;; For URLs, both text and href should be the same
+                                       href (if (= type :url)
+                                              full-match
+                                              (when (> (.groupCount matcher) 1)
+                                                (.group matcher 2)))]
+                                   (swap! matches conj {:start start
+                                                        :end end
+                                                        :type type
+                                                        :text inner-text
+                                                        :full full-match
+                                                        :href href})))
+                               @matches))
+
+          ;; Find all different types of formatting
+          ;; Order matters: bold before italic to handle ** vs * correctly
+          bold-matches (find-all-matches #"\*\*([^*]+)\*\*" :bold text)
+          code-matches (find-all-matches #"`([^`]+)`" :code text)
+          custom-link-matches (find-all-matches #"\[([^\]]+)\]\(([^)]+)\)" :custom-link text)
+          url-matches (find-all-matches #"https?://[^\s]+" :url text)
+          ;; Italic last to avoid conflicts with bold
+          italic-matches (find-all-matches #"(?<!\*)\*([^*]+)\*(?!\*)" :italic text)
+
+          ;; Combine and sort all matches by position
+          all-matches (concat bold-matches code-matches custom-link-matches url-matches italic-matches)
+          sorted-matches (sort-by :start all-matches)
+
+          ;; Remove overlapping matches (keep the earlier one)
+          non-overlapping (reduce (fn [acc match]
+                                    (if (or (empty? acc)
+                                            (>= (:start match) (:end (last acc))))
+                                      (conj acc match)
+                                      acc))
+                                  [] sorted-matches)]
+
+      ;; Build content nodes by processing matches in order
+      (loop [pos 0
+             matches non-overlapping
+             nodes []]
+        (if (empty? matches)
+          ;; Add any remaining text
+          (if (< pos (count text))
+            (conj nodes {:type "text" :text (subs text pos)})
+            nodes)
+          ;; Process next match
+          (let [match (first matches)
+                remaining (rest matches)
+                ;; Add text before match (if any)
+                nodes-with-prefix (if (< pos (:start match))
+                                    (conj nodes {:type "text" :text (subs text pos (:start match))})
+                                    nodes)
+                ;; Create formatted node
+                formatted-node (case (:type match)
+                                 :bold {:type "text" :text (:text match)
+                                        :marks [{:type "strong"}]}
+                                 :italic {:type "text" :text (:text match)
+                                          :marks [{:type "em"}]}
+                                 :code {:type "text" :text (:text match)
+                                        :marks [{:type "code"}]}
+                                 :custom-link {:type "text" :text (:text match)
+                                               :marks [{:type "link" :attrs {:href (:href match)}}]}
+                                 :url {:type "text" :text (:text match)
+                                       :marks [{:type "link" :attrs {:href (:href match)}}]})
+                updated-nodes (conj nodes-with-prefix formatted-node)]
+            (recur (:end match) remaining updated-nodes)))))))
+
+(defn create-paragraph
+  "Create ADF paragraph node from text"
+  [text]
+  (when-not (str/blank? text)
+    {:type "paragraph"
+     :content (parse-inline-formatting text)}))
+
+(defn create-heading
+  "Create ADF heading node from markdown header"
+  [text]
+  (let [level (count (take-while #(= % \#) text))
+        heading-text (str/trim (subs text level))]
+    (when (and (<= 1 level 6) (not (str/blank? heading-text)))
+      {:type "heading"
+       :attrs {:level level}
+       :content (parse-inline-formatting heading-text)})))
+
+(defn create-bullet-list
+  "Create ADF bullet list from lines starting with -"
+  [list-lines]
+  (when (seq list-lines)
+    {:type "bulletList"
+     :content (map (fn [line]
+                     (let [item-text (str/trim (subs line 1))]
+                       {:type "listItem"
+                        :content [{:type "paragraph"
+                                   :content (parse-inline-formatting item-text)}]}))
+                   list-lines)}))
+
+(defn parse-block-elements
+  "Parse block-level markdown elements (headers, lists, paragraphs)"
+  [text]
+  (if (str/blank? text)
+    []
+    (let [lines (str/split-lines text)
+          ;; Group consecutive list items
+          grouped-lines (reduce (fn [acc line]
+                                  (cond
+                                    ;; Header
+                                    (str/starts-with? line "#")
+                                    (conj acc {:type :header :line line})
+
+                                    ;; List item
+                                    (str/starts-with? line "- ")
+                                    (let [last-group (last acc)]
+                                      (if (and last-group (= (:type last-group) :list))
+                                        (update acc (dec (count acc))
+                                                #(update % :lines conj line))
+                                        (conj acc {:type :list :lines [line]})))
+
+                                    ;; Regular paragraph
+                                    (not (str/blank? line))
+                                    (conj acc {:type :paragraph :line line})
+
+                                    ;; Empty line - ignore for grouping
+                                    :else acc))
+                                [] lines)]
+
+      ;; Convert groups to ADF nodes
+      (keep (fn [group]
+              (case (:type group)
+                :header (create-heading (:line group))
+                :list (create-bullet-list (:lines group))
+                :paragraph (create-paragraph (:line group))))
+            grouped-lines))))
+
+(defn text->adf
+  "Convert text with basic markdown to Atlassian Document Format (ADF)
+  
+  Supported markdown:
+  - **bold text** → strong formatting
+  - *italic text* → emphasis formatting  
+  - `inline code` → code formatting
+  - # Header (levels 1-6) → headings
+  - - List item → bullet lists
+  - [Link text](https://example.com) → links
+  - https://example.com → auto-linked URLs
+  - PROJ-123 → plain text (Jira auto-links ticket IDs)"
+  [text]
+  (if (or (nil? text) (str/blank? text))
+    {:version 1
+     :type "doc"
+     :content []}
+    (try
+      ;; Split into paragraphs on double newlines
+      (let [paragraphs (str/split text #"\n\s*\n")
+            content (mapcat parse-block-elements paragraphs)
+            ;; Ensure we have at least one paragraph if content is empty
+            final-content (if (empty? content)
+                            [{:type "paragraph"
+                              :content (parse-inline-formatting text)}]
+                            content)]
+        {:version 1
+         :type "doc"
+         :content final-content})
+      (catch Exception e
+        ;; Fallback to simple paragraph on any parsing error
+        {:version 1
+         :type "doc"
+         :content [{:type "paragraph"
+                    :content [{:type "text" :text text}]}]}))))
+
 (defn create-issue
   "Create a new Jira issue"
   [jira-config issue-data]
