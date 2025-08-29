@@ -112,7 +112,7 @@
         (update-in [:jira :username] #(or (get-env-override env-map [:jira :username]) %))
         (update-in [:jira :api-token] #(or (get-env-override env-map [:jira :api-token]) %))
         (update-in [:workspace :root-dir] #(or (get-env-override env-map [:workspace :root-dir]) %))
-        (update [:editor] #(or (get-env-override env-map [:editor]) %)))))
+        (update :editor #(or (get-env-override env-map [:editor]) %)))))
 
 (defn expand-workspace-paths
   "Expand workspace paths to absolute paths"
