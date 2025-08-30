@@ -38,6 +38,7 @@
        "  qs <summary>      Alias for quick-story\n\n"
        "Quick Story Options:\n"
        "  -e, --editor      Open editor for ticket creation (git commit style)\n"
+       "  -f, --file <file> Create ticket from markdown file\n"
        "  --dry-run         Preview ticket without creating\n\n"
        "Quick Setup:\n"
        "  1. Run: ./setup.sh\n"
@@ -53,6 +54,7 @@
        "  c jira-check PROJ-1234           Test with a specific ticket\n"
        "  c qs \"Fix login timeout issue\"    Create a quick story\n"
        "  c qs -e                           Open editor for ticket creation\n"
+       "  c qs -f test-features.md          Create ticket from markdown file\n"
        "  c qs -e --dry-run                 Preview ticket from editor\n"
        "  c quick-story \"Add rate limiting\"  Create a story with full command\n\n"
        "Editor Mode:\n"
@@ -195,20 +197,40 @@
   "Simple flag parsing for commands. Returns {:args [...] :flags {...}}"
   [args]
   (let [flags (atom {})
-        remaining-args (atom [])]
-    (doseq [arg args]
-      (cond
-        (or (= arg "-e") (= arg "--editor"))
-        (swap! flags assoc :editor true)
+        remaining-args (atom [])
+        arg-iter (atom args)]
+    (while (seq @arg-iter)
+      (let [arg (first @arg-iter)
+            rest-args (rest @arg-iter)]
+        (cond
+          (or (= arg "-e") (= arg "--editor"))
+          (do
+            (swap! flags assoc :editor true)
+            (reset! arg-iter rest-args))
 
-        (= arg "--dry-run")
-        (swap! flags assoc :dry-run true)
+          (= arg "--dry-run")
+          (do
+            (swap! flags assoc :dry-run true)
+            (reset! arg-iter rest-args))
 
-        (str/starts-with? arg "-")
-        (println (str "Warning: Unknown flag: " arg))
+          (or (= arg "-f") (= arg "--file"))
+          (if (seq rest-args)
+            (do
+              (swap! flags assoc :file (first rest-args))
+              (reset! arg-iter (rest rest-args)))
+            (do
+              (println "Error: -f/--file requires a filename argument")
+              (System/exit 1)))
 
-        :else
-        (swap! remaining-args conj arg)))
+          (str/starts-with? arg "-")
+          (do
+            (println (str "Warning: Unknown flag: " arg))
+            (reset! arg-iter rest-args))
+
+          :else
+          (do
+            (swap! remaining-args conj arg)
+            (reset! arg-iter rest-args)))))
     {:args @remaining-args :flags @flags}))
 
 (defn open-daily-log
@@ -374,28 +396,56 @@
           (println (str "✓ Output piped to " log-path)))))))
 
 (defn quick-story-command
-  "Create a quick Jira story with minimal input or via editor"
+  "Create a quick Jira story with minimal input, via editor, or from file"
   [args]
   (let [{:keys [args flags]} (parse-flags args)
         summary (first args)
-        {:keys [editor dry-run]} flags]
+        {:keys [editor dry-run file]} flags]
 
-    ;; Get ticket data from editor or command line
-    (let [ticket-data (if editor
+    ;; Get ticket data from file, editor, or command line
+    (let [ticket-data (cond
+                        ;; File input
+                        file
+                        (if (fs/exists? file)
+                          (let [content (slurp file)
+                                lines (str/split-lines content)
+                                title (first lines)
+                                description (str/join "\n" (rest lines))]
+                            {:title title :description description})
+                          (do
+                            (println (str "Error: File not found: " file))
+                            (System/exit 1)))
+
+                        ;; Editor input
+                        editor
                         (open-ticket-editor)
-                        (when summary
-                          {:title summary :description ""}))]
+
+                        ;; Command line input
+                        summary
+                        {:title summary :description ""}
+
+                        ;; No input provided
+                        :else nil)]
 
       (when-not ticket-data
-        (if editor
+        (cond
+          editor
           (do
             (println "Editor cancelled or no content provided")
             (System/exit 0))
+
+          file
+          (do
+            (println (str "Error reading file: " file))
+            (System/exit 1))
+
+          :else
           (do
             (println "Error: story summary required")
             (println "Usage: crucible quick-story \"Your story summary\"")
             (println "   or: crucible qs \"Your story summary\"")
             (println "   or: crucible qs -e  (open editor)")
+            (println "   or: crucible qs -f filename.md  (from file)")
             (System/exit 1))))
 
       (let [{:keys [title description]} ticket-data]
@@ -404,7 +454,9 @@
         (when dry-run
           (println "=== DRY RUN ===")
           (println (str "Title: " title))
-          (println (str "Description: " description))
+          (println (str "Description:\n" description))
+          (when file
+            (println (str "Source file: " file)))
           (System/exit 0))
 
         ;; Proceed with normal ticket creation
@@ -439,7 +491,9 @@
                              issue-data)]
 
             ;; Create the issue
-            (println "Creating story...")
+            (println (if file
+                       (str "Creating story from file: " file)
+                       "Creating story..."))
             (let [result (jira/create-issue jira-config issue-data)]
               (if (:success result)
                 (let [issue-key (:key result)
@@ -461,6 +515,8 @@
                     (println "  Added to current sprint"))
                   (when user-info
                     (println (str "  Assigned to: " (:displayName user-info))))
+                  (when file
+                    (println (str "  Source: " file " (" (count (str/split-lines description)) " lines)")))
                   (println (str "\nStart working: c work-on " issue-key)))
                 (do
                   (println (str "Error: " (:error result)))

@@ -74,12 +74,14 @@
            (println "Running unit tests...")
            ;; Load dependencies first
            (load-file "core/lib/config.clj")
+           (load-file "core/lib/adf.clj")
            (load-file "core/lib/jira.clj")
            (load-file "core/bin/crucible.clj")
            ;; Now load and run tests
+           (load-file "test/lib/adf_test.clj")
            (load-file "test/lib/jira_test.clj")
            (load-file "test/bin/crucible_test.clj")
-           (let [test-results (clojure.test/run-tests 'lib.jira-test 'bin.crucible-test)]
+           (let [test-results (clojure.test/run-tests 'lib.adf-test 'lib.jira-test 'bin.crucible-test)]
              (if (and (= 0 (:error test-results))
                       (= 0 (:fail test-results)))
                (println "✅ All tests passed!")
@@ -91,7 +93,12 @@
 
   crucible
   {:doc "Main Crucible CLI dispatcher"
-   :task (load-file "core/bin/crucible.clj")}
+   :task (do
+           ;; Load dependencies first
+           (load-file "core/lib/config.clj")
+           (load-file "core/lib/adf.clj")
+           (load-file "core/lib/jira.clj")
+           (load-file "core/bin/crucible.clj"))}
 
   ;; Convenience aliases for common commands
   l
@@ -110,9 +117,7 @@
 
   qs
   {:doc "Create a quick Jira story (alias for: crucible quick-story)"
-   :task (if-let [summary (first *command-line-args*)]
-           (shell "bb" "crucible" "qs" summary)
-           (println "Usage: bb qs \"Story summary\""))}
+   :task (apply shell "bb" "crucible" "qs" *command-line-args*)}
 
   jira-check
   {:doc "Check Jira configuration and connectivity (alias for: crucible jira-check)"

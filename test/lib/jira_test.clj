@@ -1,6 +1,7 @@
 (ns lib.jira-test
   (:require [clojure.test :refer [deftest is testing]]
-            [lib.jira :as jira]))
+            [lib.jira :as jira]
+            [lib.adf :as adf]))
 
 (deftest format-ticket-summary-test
   (testing "format-ticket-summary with complete ticket data"
@@ -63,161 +64,44 @@
       (is (= (:priority result) "Critical"))
       (is (= (:type result) "Epic")))))
 
-(deftest text->adf-test
-  (testing "text->adf with nil input"
-    (let [result (jira/text->adf nil)]
-      (is (= (:version result) 1))
-      (is (= (:type result) "doc"))
-      (is (= (:content result) []))))
-
-  (testing "text->adf with empty string"
-    (let [result (jira/text->adf "")]
-      (is (= (:version result) 1))
-      (is (= (:type result) "doc"))
-      (is (= (:content result) []))))
-
-  (testing "text->adf with simple text"
+(deftest adf-conversion-test
+  (testing "Basic ADF conversion functionality"
+    ;; Test that jira/text->adf delegates properly to adf library
     (let [result (jira/text->adf "Hello world")]
       (is (= (:version result) 1))
       (is (= (:type result) "doc"))
       (is (= (count (:content result)) 1))
       (let [paragraph (first (:content result))]
-        (is (= (:type paragraph) "paragraph"))
-        (is (= (count (:content paragraph)) 1))
-        (let [text-node (first (:content paragraph))]
-          (is (= (:type text-node) "text"))
-          (is (= (:text text-node) "Hello world"))))))
+        (is (= (:type paragraph) "paragraph")))))
 
-  (testing "text->adf with bold formatting"
-    (let [result (jira/text->adf "This is **bold** text")]
-      (is (= (:version result) 1))
-      (is (= (:type result) "doc"))
-      (let [paragraph (first (:content result))
-            content (:content paragraph)]
-        (is (= (:type paragraph) "paragraph"))
-        (is (= (count content) 3))
-        ;; Before bold
-        (is (= (:text (nth content 0)) "This is "))
-        ;; Bold text
-        (is (= (:text (nth content 1)) "bold"))
-        (is (= (:marks (nth content 1)) [{:type "strong"}]))
-        ;; After bold
-        (is (= (:text (nth content 2)) " text")))))
-
-  (testing "text->adf with italic formatting"
-    (let [result (jira/text->adf "This is *italic* text")]
+  (testing "Enhanced ADF features work via lib.adf"
+    ;; Test strikethrough (new feature)
+    (let [result (adf/markdown->adf "This is ~~strikethrough~~ text")]
       (let [paragraph (first (:content result))
             content (:content paragraph)]
         (is (= (count content) 3))
-        (is (= (:text (nth content 1)) "italic"))
-        (is (= (:marks (nth content 1)) [{:type "em"}])))))
+        (is (= (:text (nth content 1)) "strikethrough"))
+        (is (= (:marks (nth content 1)) [{:type "strike"}]))))
 
-  (testing "text->adf with code formatting"
-    (let [result (jira/text->adf "Run `kubectl get pods` command")]
-      (let [paragraph (first (:content result))
-            content (:content paragraph)]
-        (is (= (count content) 3))
-        (is (= (:text (nth content 1)) "kubectl get pods"))
-        (is (= (:marks (nth content 1)) [{:type "code"}])))))
+    ;; Test ordered lists (new feature)  
+    (let [result (adf/markdown->adf "1. First item\n2. Second item")]
+      (let [ordered-list (first (:content result))]
+        (is (= (:type ordered-list) "orderedList"))
+        (is (= (count (:content ordered-list)) 2))))
 
-  (testing "text->adf with custom link"
-    (let [result (jira/text->adf "Visit [GitHub](https://github.com) for code")]
-      (let [paragraph (first (:content result))
-            content (:content paragraph)]
-        (is (= (count content) 3))
-        (is (= (:text (nth content 1)) "GitHub"))
-        (is (= (:marks (nth content 1)) [{:type "link" :attrs {:href "https://github.com"}}])))))
+    ;; Test blockquotes (new feature)
+    (let [result (adf/markdown->adf "> This is a quote")]
+      (let [blockquote (first (:content result))]
+        (is (= (:type blockquote) "blockquote"))))
 
-  (testing "text->adf with plain URL"
-    (let [result (jira/text->adf "Visit https://github.com for code")]
-      (let [paragraph (first (:content result))
-            content (:content paragraph)]
-        (is (= (count content) 3))
-        (is (= (:text (nth content 1)) "https://github.com"))
-        (is (= (:marks (nth content 1)) [{:type "link" :attrs {:href "https://github.com"}}])))))
+    ;; Test horizontal rule (new feature)  
+    (let [result (adf/markdown->adf "---")]
+      (let [rule (first (:content result))]
+        (is (= (:type rule) "rule"))))
 
-  (testing "text->adf with ticket ID (no auto-linking needed)"
-    (let [result (jira/text->adf "See ticket PROJ-123 for details")]
-      (let [paragraph (first (:content result))
-            content (:content paragraph)]
-        (is (= (count content) 1))
-        (is (= (:text (first content)) "See ticket PROJ-123 for details"))
-        (is (nil? (:marks (first content)))))))
-
-  (testing "text->adf with headers"
-    (let [result (jira/text->adf "# Main Title\n## Subtitle\n### Section")]
-      (let [content (:content result)]
-        (is (= (count content) 3))
-        ;; Level 1 header
-        (is (= (:type (nth content 0)) "heading"))
-        (is (= (get-in (nth content 0) [:attrs :level]) 1))
-        (is (= (:text (first (:content (nth content 0)))) "Main Title"))
-        ;; Level 2 header
-        (is (= (:type (nth content 1)) "heading"))
-        (is (= (get-in (nth content 1) [:attrs :level]) 2))
-        (is (= (:text (first (:content (nth content 1)))) "Subtitle"))
-        ;; Level 3 header
-        (is (= (:type (nth content 2)) "heading"))
-        (is (= (get-in (nth content 2) [:attrs :level]) 3))
-        (is (= (:text (first (:content (nth content 2)))) "Section")))))
-
-  (testing "text->adf with bullet list"
-    (let [result (jira/text->adf "- First item\n- Second item\n- Third item")]
-      (let [bullet-list (first (:content result))]
-        (is (= (:type bullet-list) "bulletList"))
-        (is (= (count (:content bullet-list)) 3))
-        (let [first-item (first (:content bullet-list))]
-          (is (= (:type first-item) "listItem"))
-          (is (= (:text (first (:content (first (:content first-item))))) "First item"))))))
-
-  (testing "text->adf with multi-paragraph text"
-    (let [result (jira/text->adf "First paragraph.\n\nSecond paragraph.\n\nThird paragraph.")]
-      (let [content (:content result)]
-        (is (= (count content) 3))
-        (is (every? #(= (:type %) "paragraph") content))
-        (is (= (:text (first (:content (nth content 0)))) "First paragraph."))
-        (is (= (:text (first (:content (nth content 1)))) "Second paragraph."))
-        (is (= (:text (first (:content (nth content 2)))) "Third paragraph.")))))
-
-  (testing "text->adf with mixed formatting"
-    (let [result (jira/text->adf "**Bold** and *italic* and `code` in one line")]
-      (let [paragraph (first (:content result))
-            content (:content paragraph)]
-        (is (= (count content) 6)) ;; bold, text, italic, text, code, text
-        (is (= (:marks (nth content 0)) [{:type "strong"}])) ;; Bold is first
-        (is (= (:marks (nth content 2)) [{:type "em"}])) ;; italic is third
-        (is (= (:marks (nth content 4)) [{:type "code"}]))))) ;; code is fifth
-
-  (testing "text->adf with complex mixed content"
-    (let [result (jira/text->adf "# Bug Report\n\nThe **login** function fails when:\n\n- User enters *special* characters\n- Password contains `$` symbols\n\nSee [documentation](https://example.com) or JIRA-123.")]
-      (let [content (:content result)]
-        (is (= (count content) 4)) ;; header, paragraph, list, paragraph
-        ;; Header
-        (is (= (:type (nth content 0)) "heading"))
-        (is (= (:text (first (:content (nth content 0)))) "Bug Report"))
-        ;; Paragraph with bold
-        (is (= (:type (nth content 1)) "paragraph"))
-        ;; Bullet list with italic
-        (is (= (:type (nth content 2)) "bulletList"))
-        ;; Paragraph with link
-        (is (= (:type (nth content 3)) "paragraph")))))
-
-  (testing "text->adf with invalid header (7 levels)"
-    (let [result (jira/text->adf "####### Invalid header")]
-      (let [paragraph (first (:content result))]
-        ;; Should be treated as regular text, not header
-        (is (= (:type paragraph) "paragraph"))
-        (is (= (:text (first (:content paragraph))) "####### Invalid header")))))
-
-  (testing "text->adf error handling - malformed input"
-    (let [result (jira/text->adf "**unclosed bold")]
-      ;; Should still create a valid ADF document
-      (is (= (:version result) 1))
-      (is (= (:type result) "doc"))
-      (is (seq (:content result)))))
-
-  (testing "text->adf preserves whitespace in code"
-    (let [result (jira/text->adf "Command: `ls -la /home/user`")]
-      (let [content (:content (first (:content result)))]
-        (is (= (:text (nth content 1)) "ls -la /home/user"))
-        (is (= (:marks (nth content 1)) [{:type "code"}]))))))
+    ;; Test code blocks (enhanced feature)
+    (let [result (adf/markdown->adf "```clojure\n(+ 1 2)\n```")]
+      (let [code-block (first (:content result))]
+        (is (= (:type code-block) "codeBlock"))
+        (is (= (get-in code-block [:attrs :language]) "clojure"))
+        (is (= (:text (first (:content code-block))) "(+ 1 2)"))))))
