@@ -15,6 +15,13 @@
         :auto-assign-self true            ; Auto-assign new stories to yourself
         :auto-add-to-sprint true}         ; Auto-add new stories to current sprint
  
+ ;; AI Enhancement (optional - improves ticket content quality)
+ :ai {:enabled false                     ; Set to true to enable AI enhancement
+      :gateway-url "https://your-ai-gateway.com/api/enhance"
+      :api-key "pass:work/ai-gateway-key" ; or plain text (not recommended)
+      :timeout-ms 5000                    ; Request timeout in milliseconds
+      :prompt "Enhance this Jira ticket for clarity and professionalism. Fix spelling and grammar. Keep the same general meaning but improve readability."}
+
  ;; Workspace configuration
  ;; All paths support ~ for home directory expansion
  :workspace {:root-dir "workspace"      ; or absolute path like "~/work/crucible-workspace"
@@ -32,6 +39,8 @@
 ;; - CRUCIBLE_JIRA_URL → :jira :base-url
 ;; - CRUCIBLE_JIRA_USER → :jira :username
 ;; - CRUCIBLE_JIRA_TOKEN → :jira :api-token
+;; - CRUCIBLE_AI_GATEWAY_URL → :ai :gateway-url
+;; - CRUCIBLE_AI_API_KEY → :ai :api-key
 ;; - CRUCIBLE_WORKSPACE_DIR → :workspace :root-dir
 ;; - EDITOR → :editor
 
