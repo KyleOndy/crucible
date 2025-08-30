@@ -1,6 +1,7 @@
 #!/usr/bin/env bb
 
 ;; Load library files
+(load-file "core/lib/ai.clj")
 (load-file "core/lib/config.clj")
 (load-file "core/lib/jira.clj")
 
@@ -9,6 +10,7 @@
    [babashka.fs :as fs]
    [babashka.process :as process]
    [clojure.string :as str]
+   [lib.ai :as ai]
    [lib.config :as config]
    [lib.jira :as jira])
   (:import
@@ -39,7 +41,10 @@
        "Quick Story Options:\n"
        "  -e, --editor      Open editor for ticket creation (git commit style)\n"
        "  -f, --file <file> Create ticket from markdown file\n"
-       "  --dry-run         Preview ticket without creating\n\n"
+       "  --dry-run         Preview ticket without creating\n"
+       "  --ai              Enable AI enhancement (overrides config)\n"
+       "  --no-ai           Disable AI enhancement (overrides config)\n"
+       "  --ai-only         Test AI enhancement without creating ticket\n\n"
        "Quick Setup:\n"
        "  1. Run: ./setup.sh\n"
        "  2. See docs/setup-guide.md for detailed instructions\n"
@@ -56,6 +61,9 @@
        "  c qs -e                           Open editor for ticket creation\n"
        "  c qs -f test-features.md          Create ticket from markdown file\n"
        "  c qs -e --dry-run                 Preview ticket from editor\n"
+       "  c qs \"fix bug\" --ai               Create AI-enhanced story\n"
+       "  c qs \"fix bug\" --ai-only          Test AI enhancement only\n"
+       "  c qs -e --ai                      Editor + AI enhancement\n"
        "  c quick-story \"Add rate limiting\"  Create a story with full command\n\n"
        "Editor Mode:\n"
        "  When using -e/--editor, enter:\n"
@@ -63,6 +71,13 @@
        "  - Remaining lines: description (markdown supported)\n"
        "  - Lines starting with # are ignored as comments\n"
        "  - Save and exit to create ticket, exit without saving to cancel\n\n"
+       "AI Enhancement:\n"
+       "  When enabled, sends title/description to AI gateway for:\n"
+       "  - Grammar and spelling correction\n"
+       "  - Clarity and professional tone\n"
+       "  - Preserving original meaning and intent\n"
+       "  Configure in crucible.edn: {:ai {:enabled true :gateway-url \"...\" :api-key \"...\"}}\n"
+       "  Use --ai-only to test prompts without creating Jira tickets\n\n"
        "Markdown Support in Descriptions:\n"
        "  **Bold text** → Bold formatting in Jira\n"
        "  *Italic text* → Italic formatting in Jira\n"
@@ -211,6 +226,21 @@
           (= arg "--dry-run")
           (do
             (swap! flags assoc :dry-run true)
+            (reset! arg-iter rest-args))
+
+          (= arg "--ai")
+          (do
+            (swap! flags assoc :ai true)
+            (reset! arg-iter rest-args))
+
+          (= arg "--no-ai")
+          (do
+            (swap! flags assoc :no-ai true)
+            (reset! arg-iter rest-args))
+
+          (= arg "--ai-only")
+          (do
+            (swap! flags assoc :ai-only true)
             (reset! arg-iter rest-args))
 
           (or (= arg "-f") (= arg "--file"))
@@ -400,34 +430,34 @@
   [args]
   (let [{:keys [args flags]} (parse-flags args)
         summary (first args)
-        {:keys [editor dry-run file]} flags]
+        {:keys [editor dry-run file ai no-ai ai-only]} flags]
 
-    ;; Get ticket data from file, editor, or command line
-    (let [ticket-data (cond
-                        ;; File input
-                        file
-                        (if (fs/exists? file)
-                          (let [content (slurp file)
-                                lines (str/split-lines content)
-                                title (first lines)
-                                description (str/join "\n" (rest lines))]
-                            {:title title :description description})
-                          (do
-                            (println (str "Error: File not found: " file))
-                            (System/exit 1)))
+    ;; Get initial ticket data from file, editor, or command line
+    (let [initial-data (cond
+                         ;; File input
+                         file
+                         (if (fs/exists? file)
+                           (let [content (slurp file)
+                                 lines (str/split-lines content)
+                                 title (first lines)
+                                 description (str/join "\n" (rest lines))]
+                             {:title title :description description})
+                           (do
+                             (println (str "Error: File not found: " file))
+                             (System/exit 1)))
 
-                        ;; Editor input
-                        editor
-                        (open-ticket-editor)
+                         ;; Editor input
+                         editor
+                         (open-ticket-editor)
 
-                        ;; Command line input
-                        summary
-                        {:title summary :description ""}
+                         ;; Command line input
+                         summary
+                         {:title summary :description ""}
 
-                        ;; No input provided
-                        :else nil)]
+                         ;; No input provided
+                         :else nil)]
 
-      (when-not ticket-data
+      (when-not initial-data
         (cond
           editor
           (do
@@ -446,81 +476,112 @@
             (println "   or: crucible qs \"Your story summary\"")
             (println "   or: crucible qs -e  (open editor)")
             (println "   or: crucible qs -f filename.md  (from file)")
+            (println "   or: crucible qs --ai-only \"test content\"  (AI enhancement only)")
             (System/exit 1))))
 
-      (let [{:keys [title description]} ticket-data]
+      ;; Load config for AI settings
+      (let [config (config/load-config)
+            ai-config (:ai config)
+            ai-enabled (and (not no-ai)
+                            (or ai ai-only (:enabled ai-config false))
+                            (:gateway-url ai-config))
 
-        ;; Handle dry-run mode
-        (when dry-run
-          (println "=== DRY RUN ===")
-          (println (str "Title: " title))
-          (println (str "Description:\n" description))
-          (when file
-            (println (str "Source file: " file)))
+            ;; Apply AI enhancement if enabled
+            enhanced-data (if ai-enabled
+                            (do
+                              (println "Enhancing content with AI...")
+                              (ai/enhance-content initial-data ai-config))
+                            initial-data)
+
+            ;; Show AI changes if any
+            _ (when (and ai-enabled (not= initial-data enhanced-data))
+                (ai/show-diff initial-data enhanced-data))
+
+            ;; Final data to use
+            final-data enhanced-data]
+
+        ;; Handle AI-only mode - exit without creating Jira ticket
+        (when ai-only
+          (println "\n=== AI-ONLY MODE ===")
+          (println "Content enhanced, no Jira ticket created")
+          (println "====================")
           (System/exit 0))
 
-        ;; Proceed with normal ticket creation
-        (let [config (config/load-config)
-              jira-config (:jira config)]
+        (let [{:keys [title description]} final-data]
 
-          ;; Validate configuration
-          (when-not (:base-url jira-config)
-            (println "Error: Jira configuration missing")
-            (println "Please set CRUCIBLE_JIRA_URL or configure in crucible.edn")
-            (System/exit 1))
+          ;; Handle dry-run mode
+          (when dry-run
+            (println "=== DRY RUN ===")
+            (println (str "Title: " title))
+            (println (str "Description:\n" description))
+            (when file
+              (println (str "Source file: " file)))
+            (System/exit 0))
 
-          (when-not (:default-project jira-config)
-            (println "Error: No default project configured")
-            (println "Please set :jira :default-project in your config file")
-            (System/exit 1))
+          ;; Proceed with normal ticket creation
+          (let [jira-config (:jira config)]
 
-          ;; Get current user info if auto-assign is enabled
-          (let [user-info (when (:auto-assign-self jira-config)
-                            (jira/get-user-info jira-config))
+            ;; Validate configuration
+            (when-not (:base-url jira-config)
+              (println "Error: Jira configuration missing")
+              (println "Please set CRUCIBLE_JIRA_URL or configure in crucible.edn")
+              (System/exit 1))
 
-                ;; Build the issue data
-                issue-data {:fields {:project {:key (:default-project jira-config)}
-                                     :summary title
-                                     :issuetype {:name (:default-issue-type jira-config)}
-                                     :description (jira/text->adf description)}}
+            (when-not (:default-project jira-config)
+              (println "Error: No default project configured")
+              (println "Please set :jira :default-project in your config file")
+              (System/exit 1))
 
-                ;; Add assignee if auto-assign is enabled and we have user info
-                issue-data (if (and user-info (:accountId user-info))
-                             (assoc-in issue-data [:fields :assignee]
-                                       {:accountId (:accountId user-info)})
-                             issue-data)]
+            ;; Get current user info if auto-assign is enabled
+            (let [user-info (when (:auto-assign-self jira-config)
+                              (jira/get-user-info jira-config))
 
-            ;; Create the issue
-            (println (if file
-                       (str "Creating story from file: " file)
-                       "Creating story..."))
-            (let [result (jira/create-issue jira-config issue-data)]
-              (if (:success result)
-                (let [issue-key (:key result)
-                      ;; Try to add to sprint if configured
-                      sprint-added? (when (:auto-add-to-sprint jira-config)
-                                      (when-let [board (jira/get-board-for-project
-                                                        jira-config
-                                                        (:default-project jira-config))]
-                                        (when-let [sprint (jira/get-current-sprint
-                                                           jira-config
-                                                           (:id board))]
-                                          (jira/add-issue-to-sprint
-                                           jira-config
-                                           (:id sprint)
-                                           issue-key))))]
-                  (println (str "\n✓ Created " issue-key ": " title))
-                  (println (str "  URL: " (str/replace (:base-url jira-config) #"/$" "") "/browse/" issue-key))
-                  (when sprint-added?
-                    (println "  Added to current sprint"))
-                  (when user-info
-                    (println (str "  Assigned to: " (:displayName user-info))))
-                  (when file
-                    (println (str "  Source: " file " (" (count (str/split-lines description)) " lines)")))
-                  (println (str "\nStart working: c work-on " issue-key)))
-                (do
-                  (println (str "Error: " (:error result)))
-                  (System/exit 1))))))))))
+                  ;; Build the issue data
+                  issue-data {:fields {:project {:key (:default-project jira-config)}
+                                       :summary title
+                                       :issuetype {:name (:default-issue-type jira-config)}
+                                       :description (jira/text->adf description)}}
+
+                  ;; Add assignee if auto-assign is enabled and we have user info
+                  issue-data (if (and user-info (:accountId user-info))
+                               (assoc-in issue-data [:fields :assignee]
+                                         {:accountId (:accountId user-info)})
+                               issue-data)]
+
+              ;; Create the issue
+              (println (cond
+                         file "Creating story from file..."
+                         ai-enabled "Creating AI-enhanced story..."
+                         :else "Creating story..."))
+              (let [result (jira/create-issue jira-config issue-data)]
+                (if (:success result)
+                  (let [issue-key (:key result)
+                        ;; Try to add to sprint if configured
+                        sprint-added? (when (:auto-add-to-sprint jira-config)
+                                        (when-let [board (jira/get-board-for-project
+                                                          jira-config
+                                                          (:default-project jira-config))]
+                                          (when-let [sprint (jira/get-current-sprint
+                                                             jira-config
+                                                             (:id board))]
+                                            (jira/add-issue-to-sprint
+                                             jira-config
+                                             (:id sprint)
+                                             issue-key))))]
+                    (println (str "\n✓ Created " issue-key ": " title))
+                    (println (str "  URL: " (str/replace (:base-url jira-config) #"/$" "") "/browse/" issue-key))
+                    (when sprint-added?
+                      (println "  Added to current sprint"))
+                    (when user-info
+                      (println (str "  Assigned to: " (:displayName user-info))))
+                    (when file
+                      (println (str "  Source: " file " (" (count (str/split-lines description)) " lines)")))
+                    (when ai-enabled
+                      (println "  Enhanced with AI"))
+                    (println (str "\nStart working: c work-on " issue-key)))
+                  (do
+                    (println (str "Error: " (:error result)))
+                    (System/exit 1)))))))))))
 
 (defn dispatch-command
   [command args]

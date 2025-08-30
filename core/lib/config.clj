@@ -15,6 +15,12 @@
           :auto-assign-self true
           :auto-add-to-sprint true}
 
+   :ai {:enabled false
+        :gateway-url nil
+        :api-key nil
+        :timeout-ms 5000
+        :prompt "Enhance this Jira ticket for clarity and professionalism. Fix spelling and grammar. Keep the same general meaning but improve readability."}
+
    :workspace {:root-dir "workspace"
                :logs-dir "logs"
                :tickets-dir "tickets"
