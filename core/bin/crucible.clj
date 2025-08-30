@@ -36,6 +36,9 @@
        "  pipe [command]    Pipe stdin to daily log (optionally log the command)\n"
        "  quick-story <summary>  Create a quick Jira story\n"
        "  qs <summary>      Alias for quick-story\n\n"
+       "Quick Story Options:\n"
+       "  -e, --editor      Open editor for ticket creation (git commit style)\n"
+       "  --dry-run         Preview ticket without creating\n\n"
        "Quick Setup:\n"
        "  1. Run: ./setup.sh\n"
        "  2. See docs/setup-guide.md for detailed instructions\n"
@@ -49,7 +52,26 @@
        "  c jira-check                      Test your Jira configuration\n"
        "  c jira-check PROJ-1234           Test with a specific ticket\n"
        "  c qs \"Fix login timeout issue\"    Create a quick story\n"
+       "  c qs -e                           Open editor for ticket creation\n"
+       "  c qs -e --dry-run                 Preview ticket from editor\n"
        "  c quick-story \"Add rate limiting\"  Create a story with full command\n\n"
+       "Editor Mode:\n"
+       "  When using -e/--editor, enter:\n"
+       "  - First line: ticket title\n"
+       "  - Remaining lines: description (markdown supported)\n"
+       "  - Lines starting with # are ignored as comments\n"
+       "  - Save and exit to create ticket, exit without saving to cancel\n\n"
+       "Markdown Support in Descriptions:\n"
+       "  **Bold text** → Bold formatting in Jira\n"
+       "  *Italic text* → Italic formatting in Jira\n"
+       "  `inline code` → Code formatting in Jira\n"
+       "  # Header → Large heading\n"
+       "  ## Subtitle → Medium heading\n"
+       "  - List item → Bullet point\n"
+       "  [Link text](https://example.com) → Clickable link\n"
+       "  https://example.com → Auto-linked URL\n"
+       "  PROJ-123 → Auto-linked to Jira ticket\n"
+       "  Double newlines create separate paragraphs\n\n"
        "Pipe Examples:\n"
        "  kubectl get pods | c pipe\n"
        "  ls -la | c pipe \"ls -la\"\n"
@@ -130,6 +152,64 @@
         (println "Error: $EDITOR environment variable not set")
         (println "Please set $EDITOR to your preferred text editor (e.g., export EDITOR=nano)")
         (System/exit 1)))))
+
+(defn create-ticket-template
+  "Create template for editor"
+  []
+  (str "\n"
+       "\n"
+       "# Enter ticket title on first line\n"
+       "# Enter description below (markdown supported)\n"
+       "# Lines starting with # are comments (ignored)\n"
+       "# Save and exit to create ticket, exit without saving to cancel\n"))
+
+(defn parse-editor-content
+  "Parse content from editor into title and description"
+  [content]
+  (let [lines (str/split-lines content)
+        non-comment-lines (filter #(not (str/starts-with? % "#")) lines)
+        non-empty-lines (filter #(not (str/blank? %)) non-comment-lines)]
+    (when (seq non-empty-lines)
+      {:title (first non-empty-lines)
+       :description (str/join "\n" (rest non-empty-lines))})))
+
+(defn open-ticket-editor
+  "Open editor for ticket creation, return parsed content"
+  []
+  (let [temp-file (fs/create-temp-file {:prefix "crucible-ticket-"
+                                        :suffix ".md"})
+        template (create-ticket-template)]
+    (try
+      (spit (str temp-file) template)
+      (launch-editor temp-file)
+      (let [content (slurp (str temp-file))
+            parsed (parse-editor-content content)]
+        (fs/delete temp-file)
+        parsed)
+      (catch Exception e
+        (when (fs/exists? temp-file)
+          (fs/delete temp-file))
+        (throw e)))))
+
+(defn parse-flags
+  "Simple flag parsing for commands. Returns {:args [...] :flags {...}}"
+  [args]
+  (let [flags (atom {})
+        remaining-args (atom [])]
+    (doseq [arg args]
+      (cond
+        (or (= arg "-e") (= arg "--editor"))
+        (swap! flags assoc :editor true)
+
+        (= arg "--dry-run")
+        (swap! flags assoc :dry-run true)
+
+        (str/starts-with? arg "-")
+        (println (str "Warning: Unknown flag: " arg))
+
+        :else
+        (swap! remaining-args conj arg)))
+    {:args @remaining-args :flags @flags}))
 
 (defn open-daily-log
   "Open today's daily log in the configured editor"
@@ -294,71 +374,97 @@
           (println (str "✓ Output piped to " log-path)))))))
 
 (defn quick-story-command
-  "Create a quick Jira story with minimal input"
-  [summary]
-  (if-not summary
-    (do
-      (println "Error: story summary required")
-      (println "Usage: crucible quick-story \"Your story summary\"")
-      (println "   or: crucible qs \"Your story summary\"")
-      (System/exit 1))
-    (let [config (config/load-config)
-          jira-config (:jira config)]
+  "Create a quick Jira story with minimal input or via editor"
+  [args]
+  (let [{:keys [args flags]} (parse-flags args)
+        summary (first args)
+        {:keys [editor dry-run]} flags]
 
-      ;; Validate configuration
-      (when-not (:base-url jira-config)
-        (println "Error: Jira configuration missing")
-        (println "Please set CRUCIBLE_JIRA_URL or configure in crucible.edn")
-        (System/exit 1))
+    ;; Get ticket data from editor or command line
+    (let [ticket-data (if editor
+                        (open-ticket-editor)
+                        (when summary
+                          {:title summary :description ""}))]
 
-      (when-not (:default-project jira-config)
-        (println "Error: No default project configured")
-        (println "Please set :jira :default-project in your config file")
-        (System/exit 1))
+      (when-not ticket-data
+        (if editor
+          (do
+            (println "Editor cancelled or no content provided")
+            (System/exit 0))
+          (do
+            (println "Error: story summary required")
+            (println "Usage: crucible quick-story \"Your story summary\"")
+            (println "   or: crucible qs \"Your story summary\"")
+            (println "   or: crucible qs -e  (open editor)")
+            (System/exit 1))))
 
-      ;; Get current user info if auto-assign is enabled
-      (let [user-info (when (:auto-assign-self jira-config)
-                        (jira/get-user-info jira-config))
+      (let [{:keys [title description]} ticket-data]
 
-            ;; Build the issue data
-            issue-data {:fields {:project {:key (:default-project jira-config)}
-                                 :summary summary
-                                 :issuetype {:name (:default-issue-type jira-config)}
-                                 :description ""}}
+        ;; Handle dry-run mode
+        (when dry-run
+          (println "=== DRY RUN ===")
+          (println (str "Title: " title))
+          (println (str "Description: " description))
+          (System/exit 0))
 
-            ;; Add assignee if auto-assign is enabled and we have user info
-            issue-data (if (and user-info (:accountId user-info))
-                         (assoc-in issue-data [:fields :assignee]
-                                   {:accountId (:accountId user-info)})
-                         issue-data)]
+        ;; Proceed with normal ticket creation
+        (let [config (config/load-config)
+              jira-config (:jira config)]
 
-        ;; Create the issue
-        (println "Creating story...")
-        (let [result (jira/create-issue jira-config issue-data)]
-          (if (:success result)
-            (let [issue-key (:key result)
-                  ;; Try to add to sprint if configured
-                  sprint-added? (when (:auto-add-to-sprint jira-config)
-                                  (when-let [board (jira/get-board-for-project
-                                                    jira-config
-                                                    (:default-project jira-config))]
-                                    (when-let [sprint (jira/get-current-sprint
-                                                       jira-config
-                                                       (:id board))]
-                                      (jira/add-issue-to-sprint
-                                       jira-config
-                                       (:id sprint)
-                                       issue-key))))]
-              (println (str "\n✓ Created " issue-key ": " summary))
-              (println (str "  Status: To Do"))
-              (when sprint-added?
-                (println "  Added to current sprint"))
-              (when user-info
-                (println (str "  Assigned to: " (:displayName user-info))))
-              (println (str "\nStart working: c work-on " issue-key)))
-            (do
-              (println (str "Error: " (:error result)))
-              (System/exit 1))))))))
+          ;; Validate configuration
+          (when-not (:base-url jira-config)
+            (println "Error: Jira configuration missing")
+            (println "Please set CRUCIBLE_JIRA_URL or configure in crucible.edn")
+            (System/exit 1))
+
+          (when-not (:default-project jira-config)
+            (println "Error: No default project configured")
+            (println "Please set :jira :default-project in your config file")
+            (System/exit 1))
+
+          ;; Get current user info if auto-assign is enabled
+          (let [user-info (when (:auto-assign-self jira-config)
+                            (jira/get-user-info jira-config))
+
+                ;; Build the issue data
+                issue-data {:fields {:project {:key (:default-project jira-config)}
+                                     :summary title
+                                     :issuetype {:name (:default-issue-type jira-config)}
+                                     :description (jira/text->adf description)}}
+
+                ;; Add assignee if auto-assign is enabled and we have user info
+                issue-data (if (and user-info (:accountId user-info))
+                             (assoc-in issue-data [:fields :assignee]
+                                       {:accountId (:accountId user-info)})
+                             issue-data)]
+
+            ;; Create the issue
+            (println "Creating story...")
+            (let [result (jira/create-issue jira-config issue-data)]
+              (if (:success result)
+                (let [issue-key (:key result)
+                      ;; Try to add to sprint if configured
+                      sprint-added? (when (:auto-add-to-sprint jira-config)
+                                      (when-let [board (jira/get-board-for-project
+                                                        jira-config
+                                                        (:default-project jira-config))]
+                                        (when-let [sprint (jira/get-current-sprint
+                                                           jira-config
+                                                           (:id board))]
+                                          (jira/add-issue-to-sprint
+                                           jira-config
+                                           (:id sprint)
+                                           issue-key))))]
+                  (println (str "\n✓ Created " issue-key ": " title))
+                  (println (str "  URL: " (str/replace (:base-url jira-config) #"/$" "") "/browse/" issue-key))
+                  (when sprint-added?
+                    (println "  Added to current sprint"))
+                  (when user-info
+                    (println (str "  Assigned to: " (:displayName user-info))))
+                  (println (str "\nStart working: c work-on " issue-key)))
+                (do
+                  (println (str "Error: " (:error result)))
+                  (System/exit 1))))))))))
 
 (defn dispatch-command
   [command args]
@@ -368,7 +474,7 @@
                   (open-daily-log)
                   (log-command (first args)))
     "pipe" (apply pipe-command args)
-    ("quick-story" "qs") (quick-story-command (first args))
+    ("quick-story" "qs") (quick-story-command args)
     "jira-check" (apply jira/run-jira-check args)
     (do
       (println (str "Unknown command: " command))

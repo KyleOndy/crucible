@@ -259,33 +259,64 @@
                                    :content (parse-inline-formatting item-text)}]}))
                    list-lines)}))
 
+(defn create-code-block
+  "Create ADF code block from markdown code fence"
+  [lines language]
+  (when (seq lines)
+    {:type "codeBlock"
+     :attrs (if (and language (not (str/blank? language)))
+              {:language language}
+              {:language "text"})
+     :content [{:type "text"
+                :text (str/join "\n" lines)}]}))
+
 (defn parse-block-elements
-  "Parse block-level markdown elements (headers, lists, paragraphs)"
+  "Parse block-level markdown elements (headers, lists, paragraphs, code blocks)"
   [text]
   (if (str/blank? text)
     []
     (let [lines (str/split-lines text)
-          ;; Group consecutive list items
+          ;; Group consecutive list items and code blocks
           grouped-lines (reduce (fn [acc line]
-                                  (cond
-                                    ;; Header
-                                    (str/starts-with? line "#")
-                                    (conj acc {:type :header :line line})
+                                  (let [last-group (last acc)
+                                        in-code-block? (and last-group
+                                                            (= (:type last-group) :code-block)
+                                                            (not (:closed? last-group)))]
+                                    (cond
+                                      ;; Check for code block end while in code block
+                                      (and in-code-block? (str/starts-with? line "```"))
+                                      (update acc (dec (count acc)) assoc :closed? true)
 
-                                    ;; List item
-                                    (str/starts-with? line "- ")
-                                    (let [last-group (last acc)]
+                                      ;; Continue collecting code block lines
+                                      in-code-block?
+                                      (update acc (dec (count acc))
+                                              #(update % :lines conj line))
+
+                                      ;; Code block start
+                                      (str/starts-with? line "```")
+                                      (let [language (str/trim (subs line 3))]
+                                        (conj acc {:type :code-block
+                                                   :language (when-not (str/blank? language) language)
+                                                   :lines []
+                                                   :closed? false}))
+
+                                      ;; Header
+                                      (str/starts-with? line "#")
+                                      (conj acc {:type :header :line line})
+
+                                      ;; List item
+                                      (str/starts-with? line "- ")
                                       (if (and last-group (= (:type last-group) :list))
                                         (update acc (dec (count acc))
                                                 #(update % :lines conj line))
-                                        (conj acc {:type :list :lines [line]})))
+                                        (conj acc {:type :list :lines [line]}))
 
-                                    ;; Regular paragraph
-                                    (not (str/blank? line))
-                                    (conj acc {:type :paragraph :line line})
+                                      ;; Regular paragraph
+                                      (not (str/blank? line))
+                                      (conj acc {:type :paragraph :line line})
 
-                                    ;; Empty line - ignore for grouping
-                                    :else acc))
+                                      ;; Empty line - ignore for grouping
+                                      :else acc)))
                                 [] lines)]
 
       ;; Convert groups to ADF nodes
@@ -293,6 +324,8 @@
               (case (:type group)
                 :header (create-heading (:line group))
                 :list (create-bullet-list (:lines group))
+                :code-block (when (:closed? group)
+                              (create-code-block (:lines group) (:language group)))
                 :paragraph (create-paragraph (:line group))))
             grouped-lines))))
 
@@ -303,6 +336,7 @@
   - **bold text** → strong formatting
   - *italic text* → emphasis formatting  
   - `inline code` → code formatting
+  - ```language → code blocks with syntax highlighting
   - # Header (levels 1-6) → headings
   - - List item → bullet lists
   - [Link text](https://example.com) → links
