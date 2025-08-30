@@ -109,11 +109,41 @@ export CRUCIBLE_WORKSPACE_DIR="~/work/crucible-workspace"
 c qs "Fix authentication timeout"
 c quick-story "Implement user dashboard"
 
+# AI-enhanced ticket creation (requires AI configuration)
+c qs "fix login bug" --ai                    # Create AI-enhanced story
+c qs -e --ai                                 # Editor + AI enhancement
+c qs -f ticket.md --ai                       # File input + AI enhancement
+
+# Test AI enhancement without creating tickets (perfect for prompt tuning)
+c qs "fix auth bug users cant login" --ai-only
+
+# Force disable AI (overrides config)
+c qs "exact title" --no-ai
+
 # The system will:
-# 1. Create the ticket in your default project
-# 2. Auto-assign to you (if configured)
-# 3. Add to current sprint (if configured)
-# 4. Show you the ticket key and URL
+# 1. Enhance content with AI (if enabled)
+# 2. Create the ticket in your default project
+# 3. Auto-assign to you (if configured)  
+# 4. Add to current sprint (if configured)
+# 5. Show you the ticket key and URL
+```
+
+### AI Enhancement Features
+
+When AI enhancement is enabled, Crucible will:
+
+- **Improve grammar and spelling** in titles and descriptions
+- **Make content more professional** while preserving your original meaning
+- **Show before/after diff** when changes are made
+- **Fall back gracefully** if AI is unavailable
+
+Example AI enhancement:
+```
+Before: "fix auth bug users cant login"
+After:  "Fix authentication bug - users cannot login"
+
+Before: "the login form is broken and users r complaining" 
+After:  "The login form is broken and users are complaining"
 ```
 
 ### Example Output
@@ -161,6 +191,27 @@ c jira-check PROJ-1234
 | `:root-dir` | ❌ | "workspace" | Root directory for workspace |
 | `:logs-dir` | ❌ | "logs" | Logs directory (relative to root) |
 | `:docs-dir` | ❌ | "docs" | Docs directory (relative to root) |
+
+### AI Enhancement Settings
+
+| Setting | Required | Default | Description |
+|---------|----------|---------|-------------|
+| `:enabled` | ❌ | false | Enable AI content enhancement |
+| `:gateway-url` | ✅* | - | AI gateway API endpoint URL |
+| `:api-key` | ✅* | - | API key or `pass:` reference |
+| `:timeout-ms` | ❌ | 5000 | Request timeout in milliseconds |
+| `:prompt` | ❌ | Default prompt | Customizable enhancement instructions |
+
+\* Required when `:enabled` is true
+
+**Example AI Configuration:**
+```edn
+:ai {:enabled true
+     :gateway-url "https://your-gateway.com/api/enhance"
+     :api-key "pass:work/ai-gateway-key"
+     :timeout-ms 8000
+     :prompt "Enhance this Jira ticket for clarity and professionalism. Fix spelling and grammar. Keep the same general meaning but improve readability."}
+```
 
 ### Password Manager Integration
 

@@ -5,26 +5,29 @@
 (load-file "core/lib/config.clj")
 (load-file "core/lib/jira.clj")
 
+
 (ns crucible
   (:require
-   [babashka.fs :as fs]
-   [babashka.process :as process]
-   [clojure.string :as str]
-   [lib.ai :as ai]
-   [lib.config :as config]
-   [lib.jira :as jira])
+    [babashka.fs :as fs]
+    [babashka.process :as process]
+    [clojure.string :as str]
+    [lib.ai :as ai]
+    [lib.config :as config]
+    [lib.jira :as jira])
   (:import
-   (java.time
-    LocalDate
-    LocalDateTime)
-   (java.time.format
-    DateTimeFormatter)
-   (java.util
-    Locale)))
+    (java.time
+      LocalDate
+      LocalDateTime)
+    (java.time.format
+      DateTimeFormatter)
+    (java.util
+      Locale)))
+
 
 (def cli-spec
   {:help {:desc "Show help"
           :alias :h}})
+
 
 (defn help-text
   []
@@ -108,6 +111,7 @@
        "  docs/jira-guide.md    Complete Jira setup and usage guide\n"
        "  docs/setup-guide.md   System setup and configuration\n"))
 
+
 (defn get-date-info
   "Returns map with formatted date information for template substitution"
   []
@@ -118,6 +122,7 @@
      :day-name (.format today day-formatter)
      :full-date (.format today full-formatter)}))
 
+
 (defn process-template
   "Replace template variables with actual values"
   [template-content date-info]
@@ -125,6 +130,7 @@
       (str/replace "{{DATE}}" (:date date-info))
       (str/replace "{{DAY_NAME}}" (:day-name date-info))
       (str/replace "{{FULL_DATE}}" (:full-date date-info))))
+
 
 (defn ensure-log-directory
   "Create workspace/logs/daily directory if it doesn't exist"
@@ -134,6 +140,7 @@
       (fs/create-dirs log-dir))
     log-dir))
 
+
 (defn get-daily-log-path
   "Get the path for today's daily log file"
   []
@@ -141,6 +148,7 @@
         date-info (get-date-info)
         filename (str (:date date-info) ".md")]
     (fs/path log-dir filename)))
+
 
 (defn create-daily-log-from-template
   "Create daily log file from template if it doesn't exist"
@@ -154,6 +162,7 @@
           (spit (str log-path) processed-content))
         ;; Fallback if template doesn't exist
         (spit (str log-path) (str "# " (:full-date date-info) " - Daily Log\n\n"))))))
+
 
 (defn launch-editor
   "Launch editor with the given file path"
@@ -170,6 +179,7 @@
         (println "Please set $EDITOR to your preferred text editor (e.g., export EDITOR=nano)")
         (System/exit 1)))))
 
+
 (defn create-ticket-template
   "Create template for editor"
   []
@@ -180,6 +190,7 @@
        "# Lines starting with # are comments (ignored)\n"
        "# Save and exit to create ticket, exit without saving to cancel\n"))
 
+
 (defn parse-editor-content
   "Parse content from editor into title and description"
   [content]
@@ -189,6 +200,7 @@
     (when (seq non-empty-lines)
       {:title (first non-empty-lines)
        :description (str/join "\n" (rest non-empty-lines))})))
+
 
 (defn open-ticket-editor
   "Open editor for ticket creation, return parsed content"
@@ -207,6 +219,7 @@
         (when (fs/exists? temp-file)
           (fs/delete temp-file))
         (throw e)))))
+
 
 (defn parse-flags
   "Simple flag parsing for commands. Returns {:args [...] :flags {...}}"
@@ -263,6 +276,7 @@
             (reset! arg-iter rest-args)))))
     {:args @remaining-args :flags @flags}))
 
+
 (defn open-daily-log
   "Open today's daily log in the configured editor"
   []
@@ -270,11 +284,13 @@
     (create-daily-log-from-template log-path)
     (launch-editor log-path)))
 
+
 (defn log-command
   [subcommand]
   (case subcommand
     "daily" (open-daily-log)
     (println (str "Unknown log subcommand: " subcommand))))
+
 
 (defn get-parent-command-java
   "Use Java ProcessHandle API to detect parent command (cross-platform)"
@@ -308,6 +324,7 @@
                 nil))))))
     (catch Exception _
       nil)))
+
 
 (defn get-parent-command-ps
   "Try to detect the command that's piping data to us using ps (fallback method)"
@@ -343,6 +360,7 @@
     (catch Exception _
       nil)))
 
+
 (defn get-parent-command
   "Unified parent command detection with fallback strategy"
   []
@@ -353,6 +371,7 @@
                java-result :processhandle
                ps-result :ps
                :else :none)}))
+
 
 (defn pipe-command
   [& args]
@@ -424,6 +443,7 @@
             (println (str "✓ Output piped to " log-path " (detected via " method-name ": " detected-command ")")))
           :else
           (println (str "✓ Output piped to " log-path)))))))
+
 
 (defn quick-story-command
   "Create a quick Jira story with minimal input, via editor, or from file"
@@ -559,15 +579,15 @@
                         ;; Try to add to sprint if configured
                         sprint-added? (when (:auto-add-to-sprint jira-config)
                                         (when-let [board (jira/get-board-for-project
-                                                          jira-config
-                                                          (:default-project jira-config))]
+                                                           jira-config
+                                                           (:default-project jira-config))]
                                           (when-let [sprint (jira/get-current-sprint
-                                                             jira-config
-                                                             (:id board))]
+                                                              jira-config
+                                                              (:id board))]
                                             (jira/add-issue-to-sprint
-                                             jira-config
-                                             (:id sprint)
-                                             issue-key))))]
+                                              jira-config
+                                              (:id sprint)
+                                              issue-key))))]
                     (println (str "\n✓ Created " issue-key ": " title))
                     (println (str "  URL: " (str/replace (:base-url jira-config) #"/$" "") "/browse/" issue-key))
                     (when sprint-added?
@@ -582,6 +602,7 @@
                   (do
                     (println (str "Error: " (:error result)))
                     (System/exit 1)))))))))))
+
 
 (defn dispatch-command
   [command args]
@@ -599,6 +620,7 @@
       (println (help-text))
       (System/exit 1))))
 
+
 (defn -main
   [& args]
   (let [command (first args)
@@ -607,6 +629,7 @@
       (or (= command "help") (= command "-h") (= command "--help")) (println (help-text))
       (or (empty? args) (nil? command)) (println (help-text))
       :else (dispatch-command command remaining-args))))
+
 
 ;; For bb execution
 ;; For bb execution

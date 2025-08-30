@@ -67,7 +67,41 @@ export CRUCIBLE_JIRA_USER="your-email@company.com"
 export CRUCIBLE_JIRA_TOKEN="your-api-token"
 ```
 
-### 3. Set Your Editor
+### 3. Configure AI Enhancement (Optional)
+
+Add AI-powered content enhancement to improve your Jira tickets:
+
+```clojure
+{:jira {:base-url "https://yourcompany.atlassian.net"
+        :username "your-email@company.com"
+        :api-token "your-api-token"
+        :default-project "PROJ"
+        :default-issue-type "Task"
+        :auto-assign-self true
+        :auto-add-to-sprint true}
+
+ :ai {:enabled true
+      :gateway-url "https://your-ai-gateway.com/api/enhance"
+      :api-key "your-api-key"
+      :timeout-ms 5000
+      :prompt "Enhance this Jira ticket for clarity and professionalism. Fix spelling and grammar. Keep the same general meaning but improve readability."}}
+```
+
+The AI enhancement:
+- **Improves grammar and spelling** in your ticket titles and descriptions
+- **Makes content more professional** while preserving your original meaning
+- **Works with all input methods** - command line, editor, and file input
+- **Fails gracefully** - if AI is unavailable, it uses your original content
+- **Customizable prompt** - tailor the enhancement style for your team
+
+#### AI Environment Variables (Alternative)
+
+```bash
+export CRUCIBLE_AI_GATEWAY_URL="https://your-ai-gateway.com/api/enhance"
+export CRUCIBLE_AI_API_KEY="your-api-key"
+```
+
+### 4. Set Your Editor
 
 Make sure your `$EDITOR` environment variable is set:
 
@@ -121,6 +155,15 @@ cpipe "docker ps"
 # Create a quick story
 c qs "Fix authentication timeout"
 c quick-story "Add API rate limiting"
+
+# AI-enhanced ticket creation (requires AI configuration)
+c qs "fix login bug" --ai                    # Create AI-enhanced story
+c qs "fix login bug" --ai-only               # Test AI enhancement only
+c qs -e --ai                                 # Editor + AI enhancement
+c qs -f ticket.md --ai                       # File input + AI enhancement
+
+# Force disable AI (overrides config)
+c qs "exact title" --no-ai
 ```
 
 ### Getting Help

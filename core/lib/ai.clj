@@ -1,8 +1,10 @@
 (ns lib.ai
   "Simple AI client for content enhancement via SMG gateway"
-  (:require [babashka.http-client :as http]
-            [cheshire.core :as json]
-            [clojure.string :as str]))
+  (:require
+    [babashka.http-client :as http]
+    [cheshire.core :as json]
+    [clojure.string :as str]))
+
 
 (defn enhance-content
   "Send content to AI gateway for enhancement"
@@ -46,6 +48,7 @@
       (println (str "AI enhancement failed: " (.getMessage e)))
       {:title title :description description})))
 
+
 (defn test-gateway
   "Test AI gateway connectivity and authentication"
   [ai-config]
@@ -63,6 +66,7 @@
       {:success false
        :error (.getMessage e)
        :message (str "Cannot reach gateway: " (.getMessage e))})))
+
 
 (defn show-diff
   "Show difference between original and enhanced content"
