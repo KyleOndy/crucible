@@ -441,20 +441,53 @@
      ;; Step 5: Sprint Integration Test (only if connected and default project configured)
      (when (and (:connection-ok @results) (:default-project jira-config))
        (println "5. Sprint Integration Check")
-       (if-let [board (get-board-for-project jira-config (:default-project jira-config))]
-         (if-let [sprint (get-current-sprint jira-config (:id board))]
+       (let [debug? (:sprint-debug jira-config false)
+             project-key (:default-project jira-config)
+             fallback-boards (:fallback-board-ids jira-config)
+             sprint-pattern (:sprint-name-pattern jira-config)
+
+             sprint-data (enhanced-sprint-detection
+                          jira-config
+                          project-key
+                          :debug debug?
+                          :fallback-board-ids fallback-boards
+                          :sprint-name-pattern sprint-pattern)]
+
+         (if sprint-data
+           (let [sprints (:sprints sprint-data)
+                 board-count (:board-count sprint-data)
+                 method (:detection-method sprint-data)]
+             (cond
+               (= 1 (count sprints))
+               (do
+                 (println (str "   [OK] Active sprint found: " (:name (first sprints))))
+                 (println (str "   Detection method: " method " (across " board-count " boards)"))
+                 (println (str "   Sprint ID: " (:id (first sprints))))
+                 (println (str "   Sprint State: " (:state (first sprints))))
+                 (swap! results assoc :sprint-integration-ok true))
+
+               (> (count sprints) 1)
+               (do
+                 (println (str "   [OK] Multiple active sprints found (" (count sprints) " sprints)"))
+                 (println (str "   Detection method: " method " (across " board-count " boards)"))
+                 (println (str "   Primary sprint: " (:name (first sprints))))
+                 (println "   Note: First sprint would be used for new tickets")
+                 (swap! results assoc :sprint-integration-ok true))
+
+               :else
+               (do
+                 (println (str "   [WARN] No active sprints found (" method ")"))
+                 (println "   Info: New tickets won't be added to sprint automatically")
+                 (swap! warnings conj "No active sprint available"))))
            (do
-             (println (str "   [OK] Active sprint found: " (:name sprint)))
-             (println (str "   Board: " (:name board)))
-             (println (str "   Sprint State: " (:state sprint)))
-             (swap! results assoc :sprint-integration-ok true))
-           (do
-             (println "   [WARN] No active sprint found")
-             (println "   Info: New tickets won't be added to sprint automatically")
-             (swap! warnings conj "No active sprint available")))
-         (do
-           (println (str "   [WARN] No board found for project: " (:default-project jira-config)))
-           (swap! warnings conj (str "Board not found for project: " (:default-project jira-config)))))
+             (println "   [WARN] Sprint detection failed completely")
+             (println "   Info: Enhanced detection with fallbacks found no active sprints")
+             (println "   Troubleshooting:")
+             (println "     - Verify project key is correct")
+             (println "     - Check user access to project boards")
+             (println "     - Consider setting :fallback-board-ids in config")
+             (println "     - Set :sprint-debug true for detailed logging")
+             (swap! warnings conj "Sprint detection failed with enhanced algorithm"))))
        (println))
 
      ;; Summary
