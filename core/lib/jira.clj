@@ -152,53 +152,57 @@
 (defn get-project-active-sprints
   "Find all active sprints across all boards for a project.
    Returns a map with :sprints (unique active sprints) and :board-count"
-  [jira-config project-key]
-  (println (str "DEBUG: Looking for active sprints for project: " project-key))
-  (if-let [boards (get-boards-for-project jira-config project-key)]
-    (do
-      (println (str "DEBUG: Found " (count boards) " boards for project " project-key))
-      (doseq [board boards]
-        (println (str "DEBUG: Board - ID: " (:id board) ", Name: " (:name board) ", Type: " (:type board))))
+  [jira-config project-key & {:keys [debug]}]
+  (let [debug? (or debug (:sprint-debug jira-config false))]
+    (when debug? (println (str "DEBUG: Looking for active sprints for project: " project-key)))
+    (if-let [boards (get-boards-for-project jira-config project-key)]
+      (do
+        (when debug? (println (str "DEBUG: Found " (count boards) " boards for project " project-key)))
+        (when debug?
+          (doseq [board boards]
+            (println (str "DEBUG: Board - ID: " (:id board) ", Name: " (:name board) ", Type: " (:type board)))))
 
-      (let [agile-url (str (:base-url jira-config) "/rest/agile/1.0")
-            auth-header (make-auth-header (:username jira-config) (:api-token jira-config))
+        (let [agile-url (str (:base-url jira-config) "/rest/agile/1.0")
+              auth-header (make-auth-header (:username jira-config) (:api-token jira-config))
 
-            ;; Get active sprints from each board
-            sprint-results (for [board boards]
-                             (let [sprint-url (str agile-url "/board/" (:id board) "/sprint?state=active")
-                                   _ (println (str "DEBUG: Checking sprints on board " (:id board) " (" (:name board) ")"))
-                                   response (http/get sprint-url
-                                                      {:headers {"Authorization" auth-header
-                                                                 "Accept" "application/json"}
-                                                       :throw false})]
-                               (println (str "DEBUG: Sprint API response status: " (:status response)))
-                               (when (= 200 (:status response))
-                                 (let [body (json/parse-string (:body response) true)
-                                       sprints (:values body)]
-                                   (println (str "DEBUG: Found " (count sprints) " active sprints on board " (:id board)))
-                                   (doseq [sprint sprints]
-                                     (println (str "DEBUG: Sprint - ID: " (:id sprint) ", Name: " (:name sprint) ", State: " (:state sprint))))
-                                   sprints))))
+              ;; Get active sprints from each board
+              sprint-results (for [board boards]
+                               (let [sprint-url (str agile-url "/board/" (:id board) "/sprint?state=active")
+                                     _ (when debug? (println (str "DEBUG: Checking sprints on board " (:id board) " (" (:name board) ")")))
+                                     response (http/get sprint-url
+                                                        {:headers {"Authorization" auth-header
+                                                                   "Accept" "application/json"}
+                                                         :throw false})]
+                                 (when debug? (println (str "DEBUG: Sprint API response status: " (:status response))))
+                                 (when (= 200 (:status response))
+                                   (let [body (json/parse-string (:body response) true)
+                                         sprints (:values body)]
+                                     (when debug? (println (str "DEBUG: Found " (count sprints) " active sprints on board " (:id board))))
+                                     (when debug?
+                                       (doseq [sprint sprints]
+                                         (println (str "DEBUG: Sprint - ID: " (:id sprint) ", Name: " (:name sprint) ", State: " (:state sprint)))))
+                                     sprints))))
 
-            ;; Flatten and deduplicate sprints by ID
-            all-sprints (->> sprint-results
-                             (filter some?) ; Remove nil results
-                             (apply concat) ; Flatten the list
-                             (group-by :id) ; Group by sprint ID
-                             (vals) ; Get groups
-                             (map first)) ; Take first from each group (deduplication)
+              ;; Flatten and deduplicate sprints by ID
+              all-sprints (->> sprint-results
+                               (filter some?) ; Remove nil results
+                               (apply concat) ; Flatten the list
+                               (group-by :id) ; Group by sprint ID
+                               (vals) ; Get groups
+                               (map first)) ; Take first from each group (deduplication)
 
-            board-count (count boards)]
+              board-count (count boards)]
 
-        (println (str "DEBUG: After deduplication, found " (count all-sprints) " unique active sprints"))
-        (doseq [sprint all-sprints]
-          (println (str "DEBUG: Unique Sprint - ID: " (:id sprint) ", Name: " (:name sprint))))
+          (when debug? (println (str "DEBUG: After deduplication, found " (count all-sprints) " unique active sprints")))
+          (when debug?
+            (doseq [sprint all-sprints]
+              (println (str "DEBUG: Unique Sprint - ID: " (:id sprint) ", Name: " (:name sprint)))))
 
-        {:sprints all-sprints
-         :board-count board-count}))
-    (do
-      (println (str "DEBUG: No boards found for project: " project-key))
-      nil)))
+          {:sprints all-sprints
+           :board-count board-count}))
+      (do
+        (when debug? (println (str "DEBUG: No boards found for project: " project-key)))
+        nil))))
 
 (defn get-user-active-sprints
   "Find active sprints where the user is assigned/participating"
@@ -236,7 +240,7 @@
 
     ;; Strategy 1: Project-wide detection (existing)
     (when debug? (println "DEBUG: Trying Strategy 1 - Project-wide sprint detection"))
-    (if-let [result (get-project-active-sprints jira-config project-key)]
+    (if-let [result (get-project-active-sprints jira-config project-key :debug debug?)]
       (do
         (when debug? (println "DEBUG: Strategy 1 succeeded"))
         (when debug? (println (str "DEBUG: Strategy 1 raw result: " result)))
