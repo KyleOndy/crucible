@@ -482,8 +482,9 @@
             (println "   or: crucible qs --ai-only \"test content\"  (AI enhancement only)")
             (System/exit 1))))
 
-      ;; Load config for AI settings
+      ;; Load config for AI settings and sprint detection
       (let [config (config/load-config)
+            jira-config (:jira config)
             ai-config (:ai config)
             ai-enabled (and (not no-ai)
                             (or ai ai-only (:enabled ai-config false))
@@ -510,129 +511,131 @@
           (println "====================")
           (System/exit 0))
 
-        (let [{:keys [title description]} final-data]
+        ;; Run sprint detection for both dry-run and normal modes
+        (let [sprint-info (when (and (:auto-add-to-sprint jira-config)
+                                     (:base-url jira-config)
+                                     (:default-project jira-config))
+                            (let [debug? (:sprint-debug jira-config false)
+                                  project-key (:default-project jira-config)
+                                  fallback-boards (:fallback-board-ids jira-config)
+                                  sprint-pattern (:sprint-name-pattern jira-config)]
 
-          ;; Handle dry-run mode
+                              (when debug? (println "--- SPRINT DETECTION DEBUG ---"))
+                              (when debug? (println (str "  Project: " project-key)))
+                              (when debug? (println (str "  Fallback boards: " fallback-boards)))
+                              (when debug? (println (str "  Name pattern: " sprint-pattern)))
+
+                              (let [sprint-data (jira/enhanced-sprint-detection
+                                                 jira-config
+                                                 project-key
+                                                 :debug debug?
+                                                 :fallback-board-ids fallback-boards
+                                                 :sprint-name-pattern sprint-pattern)]
+                                (when sprint-data
+                                  (let [sprints (:sprints sprint-data)
+                                        board-count (:board-count sprint-data)
+                                        method (:detection-method sprint-data)]
+                                    (cond
+                                      (= 1 (count sprints))
+                                      (do
+                                        (println (str "  Found 1 active sprint across " board-count " boards (" method ")"))
+                                        {:sprint (first sprints) :method method})
+
+                                      (> (count sprints) 1)
+                                      (do
+                                        (println (str "  Found " (count sprints) " active sprints, using: " (:name (first sprints)) " (" method ")"))
+                                        {:sprint (first sprints) :method method})
+
+                                      :else
+                                      (do
+                                        (println (str "  No active sprints found (" method ")"))
+                                        (when debug?
+                                          (println "  Debug suggestions:")
+                                          (println "     - Check if project key is correct")
+                                          (println "     - Verify user has access to project boards")
+                                          (println "     - Check if sprints are in 'active' state (not future/closed)")
+                                          (println "     - Consider setting :fallback-board-ids in config")
+                                          (println "     - Try: c jira-check to test basic connectivity"))
+                                        nil))))
+
+                                (when (and (not sprint-data) debug?)
+                                  (println "--- TROUBLESHOOTING ---")
+                                  (println "  Sprint detection completely failed. Try:")
+                                  (println "  1. c jira-check - verify basic connectivity")
+                                  (println "  2. Set :sprint-debug true in config for detailed logging")
+                                  (println "  3. Manually find board IDs and set :fallback-board-ids [123 456]")
+                                  (println "  4. Set :auto-add-to-sprint false to disable sprint detection")))))
+              {:keys [title description]} final-data]
+
+          ;; Handle dry-run mode (now includes sprint detection results)
           (when dry-run
             (println "=== DRY RUN ===")
             (println (str "Title: " title))
             (println (str "Description:\n" description))
             (when file
               (println (str "Source file: " file)))
+            (when sprint-info
+              (let [sprint (:sprint sprint-info)]
+                (println (str "Sprint: Would be added to \"" (:name sprint) "\" (ID: " (:id sprint) ")"))))
+            (when (and (:auto-add-to-sprint jira-config) (not sprint-info))
+              (println "Sprint: No active sprint found (would not be added to sprint)"))
             (System/exit 0))
 
           ;; Proceed with normal ticket creation
-          (let [jira-config (:jira config)]
+          ;; Validate configuration
+          (when-not (:base-url jira-config)
+            (println "Error: Jira configuration missing")
+            (println "Please set CRUCIBLE_JIRA_URL or configure in crucible.edn")
+            (System/exit 1))
 
-            ;; Validate configuration
-            (when-not (:base-url jira-config)
-              (println "Error: Jira configuration missing")
-              (println "Please set CRUCIBLE_JIRA_URL or configure in crucible.edn")
-              (System/exit 1))
+          (when-not (:default-project jira-config)
+            (println "Error: No default project configured")
+            (println "Please set :jira :default-project in your config file")
+            (System/exit 1))
 
-            (when-not (:default-project jira-config)
-              (println "Error: No default project configured")
-              (println "Please set :jira :default-project in your config file")
-              (System/exit 1))
+          ;; Get current user info if auto-assign is enabled
+          (let [user-info (when (:auto-assign-self jira-config)
+                            (jira/get-user-info jira-config))
 
-            ;; Get current user info if auto-assign is enabled
-            (let [user-info (when (:auto-assign-self jira-config)
-                              (jira/get-user-info jira-config))
+                ;; Build the issue data
+                issue-data {:fields {:project {:key (:default-project jira-config)}
+                                     :summary title
+                                     :issuetype {:name (:default-issue-type jira-config)}
+                                     :description (jira/text->adf description)}}
 
-                  ;; Build the issue data
-                  issue-data {:fields {:project {:key (:default-project jira-config)}
-                                       :summary title
-                                       :issuetype {:name (:default-issue-type jira-config)}
-                                       :description (jira/text->adf description)}}
+                ;; Add assignee if auto-assign is enabled and we have user info
+                issue-data (if (and user-info (:accountId user-info))
+                             (assoc-in issue-data [:fields :assignee]
+                                       {:accountId (:accountId user-info)})
+                             issue-data)]
 
-                  ;; Add assignee if auto-assign is enabled and we have user info
-                  issue-data (if (and user-info (:accountId user-info))
-                               (assoc-in issue-data [:fields :assignee]
-                                         {:accountId (:accountId user-info)})
-                               issue-data)]
-
-              ;; Create the issue
-              (println (cond
-                         file "Creating story from file..."
-                         ai-enabled "Creating AI-enhanced story..."
-                         :else "Creating story..."))
-              (let [result (jira/create-issue jira-config issue-data)]
-                (if (:success result)
-                  (let [issue-key (:key result)
-                        ;; Try to add to sprint if configured
-                        ;; Try to add to sprint if configured - using project-wide sprint detection
-                        ;; Try to add to sprint if configured - using enhanced detection with fallbacks
-                        sprint-result (when (:auto-add-to-sprint jira-config)
-                                        (let [debug? (:sprint-debug jira-config false)
-                                              project-key (:default-project jira-config)
-                                              fallback-boards (:fallback-board-ids jira-config)
-                                              sprint-pattern (:sprint-name-pattern jira-config)]
-
-                                          (when debug? (println "--- SPRINT DETECTION DEBUG ---"))
-                                          (when debug? (println (str "  Project: " project-key)))
-                                          (when debug? (println (str "  Fallback boards: " fallback-boards)))
-                                          (when debug? (println (str "  Name pattern: " sprint-pattern)))
-
-                                          (let [sprint-data (jira/enhanced-sprint-detection
-                                                             jira-config
-                                                             project-key
-                                                             :debug debug?
-                                                             :fallback-board-ids fallback-boards
-                                                             :sprint-name-pattern sprint-pattern)]
-                                            (when sprint-data
-                                              (let [sprints (:sprints sprint-data)
-                                                    board-count (:board-count sprint-data)
-                                                    method (:detection-method sprint-data)]
-                                                (cond
-                                                  (= 1 (count sprints))
-                                                  (do
-                                                    (println (str "  Found 1 active sprint across " board-count " boards (" method ")"))
-                                                    {:sprint (first sprints) :method method})
-
-                                                  (> (count sprints) 1)
-                                                  (do
-                                                    (println (str "  Found " (count sprints) " active sprints, using: " (:name (first sprints)) " (" method ")"))
-                                                    {:sprint (first sprints) :method method})
-
-                                                  :else
-                                                  (do
-                                                    (println (str "  No active sprints found (" method ")"))
-                                                    (when debug?
-                                                      (println "  Debug suggestions:")
-                                                      (println "     - Check if project key is correct")
-                                                      (println "     - Verify user has access to project boards")
-                                                      (println "     - Check if sprints are in 'active' state (not future/closed)")
-                                                      (println "     - Consider setting :fallback-board-ids in config")
-                                                      (println "     - Try: c jira-check to test basic connectivity"))
-                                                    nil))))
-
-                                            (when (and (not sprint-data) debug?)
-                                              (println "--- TROUBLESHOOTING ---")
-                                              (println "  Sprint detection completely failed. Try:")
-                                              (println "  1. c jira-check - verify basic connectivity")
-                                              (println "  2. Set :sprint-debug true in config for detailed logging")
-                                              (println "  3. Manually find board IDs and set :fallback-board-ids [123 456]")
-                                              (println "  4. Set :auto-add-to-sprint false to disable sprint detection")))))
-
-                        sprint-added? (when sprint-result
-                                        (jira/add-issue-to-sprint
-                                         jira-config
-                                         (:id (:sprint sprint-result))
-                                         issue-key))]
-                    (println (str "\nCreated " issue-key ": " title))
-                    (println (str "  URL: " (str/replace (:base-url jira-config) #"/$" "") "/browse/" issue-key))
-                    (when sprint-added?
-                      (println "  Added to current sprint"))
-                    (when user-info
-                      (println (str "  Assigned to: " (:displayName user-info))))
-                    (when file
-                      (println (str "  Source: " file " (" (count (str/split-lines description)) " lines)")))
-                    (when ai-enabled
-                      (println "  Enhanced with AI"))
-                    (println (str "\nStart working: c work-on " issue-key)))
-                  (do
-                    (println (str "Error: " (:error result)))
-                    (System/exit 1)))))))))))
+            ;; Create the issue
+            (println (cond
+                       file "Creating story from file..."
+                       ai-enabled "Creating AI-enhanced story..."
+                       :else "Creating story..."))
+            (let [result (jira/create-issue jira-config issue-data)]
+              (if (:success result)
+                (let [issue-key (:key result)
+                      sprint-added? (when sprint-info
+                                      (jira/add-issue-to-sprint
+                                       jira-config
+                                       (:id (:sprint sprint-info))
+                                       issue-key))]
+                  (println (str "\nCreated " issue-key ": " title))
+                  (println (str "  URL: " (str/replace (:base-url jira-config) #"/$" "") "/browse/" issue-key))
+                  (when sprint-added?
+                    (println "  Added to current sprint"))
+                  (when user-info
+                    (println (str "  Assigned to: " (:displayName user-info))))
+                  (when file
+                    (println (str "  Source: " file " (" (count (str/split-lines description)) " lines)")))
+                  (when ai-enabled
+                    (println "  Enhanced with AI"))
+                  (println (str "\nStart working: c work-on " issue-key)))
+                (do
+                  (println (str "Error: " (:error result)))
+                  (System/exit 1))))))))))
 
 (defn system-check-command
   "Perform comprehensive system check and show configuration status"
@@ -675,10 +678,12 @@
 
   ;; Workspace Status
   ;; Workspace Status
+  ;; Workspace Status
   (println "Workspace Status:")
   (try
     (let [config (config/load-config)
-          workspace-config (:workspace config)]
+          workspace-config (:workspace config)
+          dir-check (config/check-workspace-directories workspace-config)]
       (println (str "  Configured root directory: " (:root-dir workspace-config) " "
                     (if (fs/exists? (:root-dir workspace-config)) "[EXISTS]" "[NOT FOUND]")))
       (println (str "  Configured logs directory: " (:logs-dir workspace-config) " "
@@ -686,7 +691,35 @@
       (println (str "  Configured tickets directory: " (:tickets-dir workspace-config) " "
                     (if (fs/exists? (:tickets-dir workspace-config)) "[EXISTS]" "[NOT FOUND]")))
       (println (str "  Configured docs directory: " (:docs-dir workspace-config) " "
-                    (if (fs/exists? (:docs-dir workspace-config)) "[EXISTS]" "[NOT FOUND]"))))
+                    (if (fs/exists? (:docs-dir workspace-config)) "[EXISTS]" "[NOT FOUND]")))
+
+      ;; Offer to create missing directories
+      (when (> (:missing-dirs dir-check) 0)
+        (println)
+        (println (str "  [INFO] " (:missing-dirs dir-check) " of " (:total-dirs dir-check) " workspace directories are missing"))
+        (println "  Missing directories:")
+        (doseq [{:keys [description path]} (:missing-list dir-check)]
+          (println (str "    - " description ": " path)))
+        (println)
+        (print "  Create missing directories? [y/N]: ")
+        (flush)
+        (let [response (read-line)]
+          (when (and response (or (= (str/lower-case response) "y")
+                                  (= (str/lower-case response) "yes")))
+            (println "  Creating directories...")
+            (let [creation-results (config/ensure-workspace-directories workspace-config)]
+              (doseq [[dir-key result] creation-results]
+                (cond
+                  (:created result)
+                  (println (str "    [CREATED] " (:description result) ": " (:path result)))
+
+                  (and (not (:created result)) (:exists result))
+                  nil ; Already existed, don't print anything
+
+                  :else
+                  (println (str "    [ERROR] Failed to create " (:path result)
+                                (when (:error result) (str ": " (:error result)))))))
+              (println "  Directory creation complete."))))))
     (catch Exception e
       (println "  [ERROR] Could not load workspace configuration")
       (println (str "  Error: " (.getMessage e)))))

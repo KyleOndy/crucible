@@ -199,7 +199,7 @@ Customize where files are stored:
 Configuration is loaded from (later overrides earlier):
 
 1. Built-in defaults
-2. `~/.config/crucible/config.edn` or `~/.crucible/config.edn` (user config)
+2. `~/.config/crucible/config.edn` (user config)
 3. `./crucible.edn` (project-specific config)
 4. Environment variables (`CRUCIBLE_*`)
 5. Password manager resolution (for `pass:` prefixed values)

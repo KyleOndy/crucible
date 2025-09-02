@@ -69,9 +69,7 @@ export CRUCIBLE_JIRA_TOKEN="your_actual_token_here"
 Crucible looks for configuration in this order (later overrides earlier):
 
 1. **Built-in defaults**
-2. **User global config**:
-   - `~/.config/crucible/config.edn` (XDG standard)
-   - `~/.crucible/config.edn` (legacy)
+2. **User global config**: `~/.config/crucible/config.edn` (XDG standard)
 3. **Project-specific config**: `./crucible.edn`
 4. **Environment variables**
 
