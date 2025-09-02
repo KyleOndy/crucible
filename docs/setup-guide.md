@@ -88,6 +88,7 @@ Add AI-powered content enhancement to improve your Jira tickets:
 ```
 
 The AI enhancement:
+
 - **Improves grammar and spelling** in your ticket titles and descriptions
 - **Makes content more professional** while preserving your original meaning
 - **Works with all input methods** - command line, editor, and file input

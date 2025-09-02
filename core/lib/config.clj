@@ -84,8 +84,8 @@
   []
   (let [xdg-config-home (or (System/getenv "XDG_CONFIG_HOME")
                             (str (System/getProperty "user.home") "/.config"))
-        xdg-config-path (fs/path xdg-config-home "crucible" "config.edn")
-        legacy-config-path (fs/path (System/getProperty "user.home") ".crucible" "config.edn")]
+        xdg-config-path (str (fs/path xdg-config-home "crucible" "config.edn"))
+        legacy-config-path (str (fs/path (System/getProperty "user.home") ".crucible" "config.edn"))]
     ;; Try XDG location first, then fall back to legacy location
     (or (load-edn-file xdg-config-path)
         (load-edn-file legacy-config-path))))

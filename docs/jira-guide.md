@@ -40,6 +40,7 @@ c quick-story "Add rate limiting to API"
 ### Step 2: Store Your Token Securely
 
 **Option A: Using Pass Password Manager (Recommended)**
+
 ```bash
 # Store in pass
 pass insert work/jira-token
@@ -49,12 +50,14 @@ pass insert work/jira-token
 ```
 
 **Option B: Environment Variable**
+
 ```bash
 # Add to your shell profile (.bashrc, .zshrc, etc.)
 export CRUCIBLE_JIRA_TOKEN="your_actual_token_here"
 ```
 
 **Option C: Direct in Config File (Not Recommended)**
+
 ```edn
 :api-token "your_actual_token_here"  ; Less secure
 ```
@@ -138,6 +141,7 @@ When AI enhancement is enabled, Crucible will:
 - **Fall back gracefully** if AI is unavailable
 
 Example AI enhancement:
+
 ```
 Before: "fix auth bug users cant login"
 After:  "Fix authentication bug - users cannot login"
@@ -205,6 +209,7 @@ c jira-check PROJ-1234
 \* Required when `:enabled` is true
 
 **Example AI Configuration:**
+
 ```edn
 :ai {:enabled true
      :gateway-url "https://your-gateway.com/api/enhance"
@@ -229,6 +234,7 @@ The value after `pass:` is passed to: `pass show <value>`
 ### Common Issues
 
 **"Configuration errors found"**
+
 ```bash
 # Check what's missing
 c jira-check
@@ -240,22 +246,26 @@ export CRUCIBLE_JIRA_TOKEN="your_token"
 ```
 
 **"Authentication failed"**
+
 - Verify your API token is correct
 - Check your username (should be email address)  
 - Ensure your Jira URL is correct (don't forget https://)
 - Test token manually: `curl -u email@company.com:token https://yourcompany.atlassian.net/rest/api/3/myself`
 
 **"Project not found" / "No default project configured"**
+
 ```edn
 {:jira {:default-project "PROJECTKEY"}}  ; Use your actual project key
 ```
 
 **"Failed to retrieve password from pass"**
+
 - Ensure `pass` is installed and configured
 - Test: `pass show work/jira-token`
 - Check the path matches your config
 
 **"No current sprint found"**
+
 - Your project might not use sprints
 - Set `:auto-add-to-sprint false` in config
 - Or ensure your board has an active sprint
@@ -264,11 +274,14 @@ export CRUCIBLE_JIRA_TOKEN="your_token"
 
 1. **Test configuration**: `c jira-check`
 2. **Test connection manually**:
+
    ```bash
    bb test-jira.clj
    ```
+
 3. **Test with specific ticket**: `c jira-check PROJ-123`
 4. **Check configuration loading**:
+
    ```bash
    bb -e "(load-file \"core/lib/config.clj\") (require '[lib.config :as config]) (config/load-config)"
    ```
@@ -284,6 +297,7 @@ When `:auto-assign-self true` (default), new tickets are automatically assigned 
 When `:auto-add-to-sprint true` (default), new tickets are automatically added to the current active sprint for your project.
 
 **Requirements:**
+
 - Your project must use a Scrum/Kanban board
 - There must be an active sprint
 - You must have permissions to modify the sprint
