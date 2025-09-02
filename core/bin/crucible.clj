@@ -175,13 +175,16 @@
 
 (defn create-ticket-template
   "Create template for editor"
-  []
-  (str "\n"
-       "\n"
-       "# Enter ticket title on first line\n"
-       "# Enter description below (markdown supported)\n"
-       "# Lines starting with # are comments (ignored)\n"
-       "# Save and exit to create ticket, exit without saving to cancel\n"))
+  ([]
+   (create-ticket-template nil))
+  ([title]
+   (str (if title (str title "\n") "")
+        "\n"
+        "# Enter ticket title on first line" (when title " (or edit above)")
+        "\n"
+        "# Enter description below (markdown supported)\n"
+        "# Lines starting with # are comments (ignored)\n"
+        "# Save and exit to create ticket, exit without saving to cancel\n")))
 
 (defn parse-editor-content
   "Parse content from editor into title and description"
@@ -195,21 +198,23 @@
 
 (defn open-ticket-editor
   "Open editor for ticket creation, return parsed content"
-  []
-  (let [temp-file (fs/create-temp-file {:prefix "crucible-ticket-"
-                                        :suffix ".md"})
-        template (create-ticket-template)]
-    (try
-      (spit (str temp-file) template)
-      (launch-editor temp-file)
-      (let [content (slurp (str temp-file))
-            parsed (parse-editor-content content)]
-        (fs/delete temp-file)
-        parsed)
-      (catch Exception e
-        (when (fs/exists? temp-file)
-          (fs/delete temp-file))
-        (throw e)))))
+  ([]
+   (open-ticket-editor nil))
+  ([title]
+   (let [temp-file (fs/create-temp-file {:prefix "crucible-ticket-"
+                                         :suffix ".md"})
+         template (create-ticket-template title)]
+     (try
+       (spit (str temp-file) template)
+       (launch-editor temp-file)
+       (let [content (slurp (str temp-file))
+             parsed (parse-editor-content content)]
+         (fs/delete temp-file)
+         parsed)
+       (catch Exception e
+         (when (fs/exists? temp-file)
+           (fs/delete temp-file))
+         (throw e))))))
 
 (defn parse-flags
   "Simple flag parsing for commands. Returns {:args [...] :flags {...}}"
@@ -451,7 +456,7 @@
 
                          ;; Editor input
                          editor
-                         (open-ticket-editor)
+                         (open-ticket-editor summary)
 
                          ;; Command line input
                          summary
