@@ -239,7 +239,11 @@
     (if-let [result (get-project-active-sprints jira-config project-key)]
       (do
         (when debug? (println "DEBUG: Strategy 1 succeeded"))
-        (assoc result :detection-method "project-wide"))
+        (when debug? (println (str "DEBUG: Strategy 1 raw result: " result)))
+        (let [final-result (assoc result :detection-method "project-wide")]
+          (when debug? (println (str "DEBUG: Strategy 1 final result: " final-result)))
+          (when debug? (println (str "DEBUG: Returning from enhanced-sprint-detection: " final-result)))
+          final-result))
 
       ;; Strategy 2: Fallback board IDs
       (do
@@ -265,19 +269,24 @@
                                  (map first))]
             (when debug? (println (str "DEBUG: Fallback boards found " (count all-sprints) " unique sprints")))
             (if (seq all-sprints)
-              {:sprints all-sprints
-               :board-count (count fallback-board-ids)
-               :detection-method "fallback-boards"}
+              (let [final-result {:sprints all-sprints
+                                  :board-count (count fallback-board-ids)
+                                  :detection-method "fallback-boards"}]
+                (when debug? (println (str "DEBUG: Strategy 2 final result: " final-result)))
+                (when debug? (println (str "DEBUG: Returning from enhanced-sprint-detection: " final-result)))
+                final-result)
 
               ;; Strategy 3: Sprint name pattern (placeholder)
               (do
                 (when debug? (println "DEBUG: Strategy 2 failed, trying Strategy 3 - Name pattern matching"))
                 (when debug? (println "DEBUG: Strategy 3 not yet implemented"))
+                (when debug? (println "DEBUG: All strategies failed, returning nil"))
                 nil)))
 
           ;; No fallback boards configured
           (do
             (when debug? (println "DEBUG: No fallback board IDs configured"))
+            (when debug? (println "DEBUG: Strategy 1 failed, no fallback boards, returning nil"))
             nil))))))
 
 (defn add-issue-to-sprint
