@@ -651,8 +651,7 @@
                          :else "[NOT FOUND]")]
         (println (str "  " (case config-type
                              :project-config "Project config"
-                             :xdg-config "XDG config"
-                             :legacy-config "Legacy config")
+                             :xdg-config "User config")
                       ": " path " " status-str)))))
   (println)
 
@@ -675,30 +674,42 @@
   (println)
 
   ;; Workspace Status
+  ;; Workspace Status
   (println "Workspace Status:")
-  (let [workspace-dir (or (System/getenv "CRUCIBLE_WORKSPACE_DIR") "workspace")
-        workspace-path (str (System/getProperty "user.dir") "/" workspace-dir)
-        logs-dir (str workspace-path "/logs")
-        tickets-dir (str workspace-path "/tickets")]
-    (println (str "  Workspace directory: " workspace-path " "
-                  (if (fs/exists? workspace-path) "[EXISTS]" "[NOT FOUND]")))
-    (println (str "  Logs directory: " logs-dir " "
-                  (if (fs/exists? logs-dir) "[EXISTS]" "[NOT FOUND]")))
-    (println (str "  Tickets directory: " tickets-dir " "
-                  (if (fs/exists? tickets-dir) "[EXISTS]" "[NOT FOUND]"))))
+  (try
+    (let [config (config/load-config)
+          workspace-config (:workspace config)]
+      (println (str "  Configured root directory: " (:root-dir workspace-config) " "
+                    (if (fs/exists? (:root-dir workspace-config)) "[EXISTS]" "[NOT FOUND]")))
+      (println (str "  Configured logs directory: " (:logs-dir workspace-config) " "
+                    (if (fs/exists? (:logs-dir workspace-config)) "[EXISTS]" "[NOT FOUND]")))
+      (println (str "  Configured tickets directory: " (:tickets-dir workspace-config) " "
+                    (if (fs/exists? (:tickets-dir workspace-config)) "[EXISTS]" "[NOT FOUND]")))
+      (println (str "  Configured docs directory: " (:docs-dir workspace-config) " "
+                    (if (fs/exists? (:docs-dir workspace-config)) "[EXISTS]" "[NOT FOUND]"))))
+    (catch Exception e
+      (println "  [ERROR] Could not load workspace configuration")
+      (println (str "  Error: " (.getMessage e)))))
   (println)
 
+  ;; Configuration Summary
   ;; Configuration Summary
   (println "Configuration Summary:")
   (try
     (let [config (config/load-config)
-          jira-config (:jira config)]
+          jira-config (:jira config)
+          workspace-config (:workspace config)]
       (println "  Configuration loaded successfully")
       (println (str "  Default project: " (or (:default-project jira-config) "[NOT SET]")))
       (println (str "  Auto-add to sprint: " (:auto-add-to-sprint jira-config)))
       (println (str "  Sprint debug: " (:sprint-debug jira-config)))
       (when (:fallback-board-ids jira-config)
-        (println (str "  Fallback board IDs: " (:fallback-board-ids jira-config)))))
+        (println (str "  Fallback board IDs: " (:fallback-board-ids jira-config))))
+      (println "  Workspace configuration:")
+      (println (str "    Root dir: " (:root-dir workspace-config)))
+      (println (str "    Logs dir: " (:logs-dir workspace-config)))
+      (println (str "    Tickets dir: " (:tickets-dir workspace-config)))
+      (println (str "    Docs dir: " (:docs-dir workspace-config))))
     (catch Exception e
       (println "  [ERROR] Failed to load configuration")
       (println (str "  Error: " (.getMessage e)))))
