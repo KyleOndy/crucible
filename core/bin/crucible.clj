@@ -548,48 +548,67 @@
                                     (println (str "  :board-count: " (:board-count sprint-data)))
                                     (println (str "  :detection-method: " (:detection-method sprint-data)))))
 
-                                (when sprint-data
-                                  (let [sprints (:sprints sprint-data)
-                                        board-count (:board-count sprint-data)
-                                        method (:detection-method sprint-data)]
-                                    ;; DEBUG: Add more logging right before the cond
-                                    (when debug?
-                                      (println "--- SPRINT PROCESSING LOGIC DEBUG ---")
-                                      (println (str "  sprints variable: " sprints))
-                                      (println (str "  sprints count: " (count sprints)))
-                                      (println (str "  method variable: " method)))
+                                ;; Process sprint data and return result (FIX: ensure this is the return value)
+                                (let [sprint-result
+                                      (when sprint-data
+                                        (let [sprints (:sprints sprint-data)
+                                              board-count (:board-count sprint-data)
+                                              method (:detection-method sprint-data)]
+                                          ;; DEBUG: Add more logging right before the cond
+                                          (when debug?
+                                            (println "--- SPRINT PROCESSING LOGIC DEBUG ---")
+                                            (println (str "  sprints variable: " sprints))
+                                            (println (str "  sprints count: " (count sprints)))
+                                            (println (str "  method variable: " method)))
 
-                                    (cond
-                                      (= 1 (count sprints))
-                                      (do
-                                        (println (str "  Found 1 active sprint across " board-count " boards (" method ")"))
-                                        {:sprint (first sprints) :method method})
+                                          (cond
+                                            (= 1 (count sprints))
+                                            (do
+                                              (println (str "  Found 1 active sprint across " board-count " boards (" method ")"))
+                                              {:sprint (first sprints) :method method})
 
-                                      (> (count sprints) 1)
-                                      (do
-                                        (println (str "  Found " (count sprints) " active sprints, using: " (:name (first sprints)) " (" method ")"))
-                                        {:sprint (first sprints) :method method})
+                                            (> (count sprints) 1)
+                                            (do
+                                              (println (str "  Found " (count sprints) " active sprints, using: " (:name (first sprints)) " (" method ")"))
+                                              {:sprint (first sprints) :method method})
 
-                                      :else
-                                      (do
-                                        (println (str "  No active sprints found (" method ")"))
-                                        (when debug?
-                                          (println "  Debug suggestions:")
-                                          (println "     - Check if project key is correct")
-                                          (println "     - Verify user has access to project boards")
-                                          (println "     - Check if sprints are in 'active' state (not future/closed)")
-                                          (println "     - Consider setting :fallback-board-ids in config")
-                                          (println "     - Try: c jira-check to test basic connectivity"))
-                                        nil))))
+                                            :else
+                                            (do
+                                              (println (str "  No active sprints found (" method ")"))
+                                              (when debug?
+                                                (println "  Debug suggestions:")
+                                                (println "     - Check if project key is correct")
+                                                (println "     - Verify user has access to project boards")
+                                                (println "     - Check if sprints are in 'active' state (not future/closed)")
+                                                (println "     - Consider setting :fallback-board-ids in config")
+                                                (println "     - Try: c jira-check to test basic connectivity"))
+                                              nil))))]
 
-                                (when (and (not sprint-data) debug?)
-                                  (println "--- TROUBLESHOOTING ---")
-                                  (println "  Sprint detection completely failed. Try:")
-                                  (println "  1. c jira-check - verify basic connectivity")
-                                  (println "  2. Set :sprint-debug true in config for detailed logging")
-                                  (println "  3. Manually find board IDs and set :fallback-board-ids [123 456]")
-                                  (println "  4. Set :auto-add-to-sprint false to disable sprint detection")))))
+                                  ;; DEBUG: Log the final sprint result that will be returned
+                                  (when debug?
+                                    (println "--- FINAL SPRINT RESULT DEBUG ---")
+                                    (println (str "  sprint-result: " sprint-result))
+                                    (println (str "  sprint-result nil?: " (nil? sprint-result))))
+
+                                  ;; Show troubleshooting if no sprint data
+                                  (when (and (not sprint-data) debug?)
+                                    (println "--- TROUBLESHOOTING ---")
+                                    (println "  Sprint detection completely failed. Try:")
+                                    (println "  1. c jira-check - verify basic connectivity")
+                                    (println "  2. Set :sprint-debug true in config for detailed logging")
+                                    (println "  3. Manually find board IDs and set :fallback-board-ids [123 456]")
+                                    (println "  4. Set :auto-add-to-sprint false to disable sprint detection"))
+
+                                  ;; Return the sprint result (this is the key fix!)
+                                  sprint-result))))
               {:keys [title description]} final-data]
+
+          ;; DEBUG: Log what sprint-info actually contains
+          (let [debug? (:sprint-debug jira-config false)]
+            (when debug?
+              (println "--- SPRINT-INFO FINAL ASSIGNMENT DEBUG ---")
+              (println (str "  Final sprint-info: " sprint-info))
+              (println (str "  sprint-info nil?: " (nil? sprint-info)))))
 
           ;; Handle dry-run mode (now includes sprint detection results)
           (when dry-run
