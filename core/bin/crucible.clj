@@ -531,10 +531,27 @@
                                                  :debug debug?
                                                  :fallback-board-ids fallback-boards
                                                  :sprint-name-pattern sprint-pattern)]
+                                ;; DEBUG: Add detailed logging of sprint-data structure
+                                (when debug?
+                                  (println "--- SPRINT DATA STRUCTURE DEBUG ---")
+                                  (println (str "  sprint-data: " sprint-data))
+                                  (when sprint-data
+                                    (println (str "  :sprints key: " (:sprints sprint-data)))
+                                    (println (str "  :sprints count: " (count (:sprints sprint-data))))
+                                    (println (str "  :board-count: " (:board-count sprint-data)))
+                                    (println (str "  :detection-method: " (:detection-method sprint-data)))))
+
                                 (when sprint-data
                                   (let [sprints (:sprints sprint-data)
                                         board-count (:board-count sprint-data)
                                         method (:detection-method sprint-data)]
+                                    ;; DEBUG: Add more logging right before the cond
+                                    (when debug?
+                                      (println "--- SPRINT PROCESSING LOGIC DEBUG ---")
+                                      (println (str "  sprints variable: " sprints))
+                                      (println (str "  sprints count: " (count sprints)))
+                                      (println (str "  method variable: " method)))
+
                                     (cond
                                       (= 1 (count sprints))
                                       (do
