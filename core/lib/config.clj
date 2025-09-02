@@ -168,6 +168,44 @@
        "  3. Environment variables (CRUCIBLE_*)\n"
        "  4. Built-in defaults"))
 
+(defn get-config-file-status
+  "Get the actual status of config files and their paths"
+  []
+  (let [project-path "crucible.edn"
+        xdg-config-home (or (System/getenv "XDG_CONFIG_HOME")
+                            (str (System/getProperty "user.home") "/.config"))
+        xdg-path (str (fs/path xdg-config-home "crucible" "config.edn"))
+        legacy-path (str (fs/path (System/getProperty "user.home") ".crucible" "config.edn"))]
+
+    {:project-config {:path project-path
+                      :exists (fs/exists? project-path)
+                      :readable (and (fs/exists? project-path)
+                                     (fs/readable? project-path))}
+     :xdg-config {:path xdg-path
+                  :exists (fs/exists? xdg-path)
+                  :readable (and (fs/exists? xdg-path)
+                                 (fs/readable? xdg-path))}
+     :legacy-config {:path legacy-path
+                     :exists (fs/exists? legacy-path)
+                     :readable (and (fs/exists? legacy-path)
+                                    (fs/readable? legacy-path))}}))
+
+(defn get-env-var-status
+  "Get status of relevant environment variables"
+  []
+  (let [env-vars ["CRUCIBLE_JIRA_URL"
+                  "CRUCIBLE_JIRA_USERNAME"
+                  "CRUCIBLE_JIRA_API_TOKEN"
+                  "CRUCIBLE_WORKSPACE_DIR"
+                  "EDITOR"]]
+    (into {} (map (fn [var]
+                    [var {:set (some? (System/getenv var))
+                          :value (when-let [val (System/getenv var)]
+                                   (if (str/includes? var "TOKEN")
+                                     "*****" ; Hide sensitive values
+                                     val))}])
+                  env-vars))))
+
 (defn print-config-error
   "Print a configuration error with helpful context"
   [errors]

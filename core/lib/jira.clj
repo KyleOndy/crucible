@@ -342,7 +342,7 @@
   "Comprehensive Jira configuration and connectivity check with user-friendly output"
   ([jira-config] (comprehensive-jira-check jira-config nil))
   ([jira-config test-ticket-id]
-   (println "🔍 Checking Jira Configuration and Connectivity")
+   (println "Checking Jira Configuration and Connectivity")
    (println (str "   " (java.time.LocalDateTime/now)))
    (println)
 
@@ -355,97 +355,97 @@
          warnings (atom [])]
 
      ;; Step 1: Configuration Validation
-     (println "1️⃣  Configuration Validation")
+     (println "1. Configuration Validation")
      (if jira-config
        (let [required-keys [:base-url :username :api-token]
              missing-keys (filter #(not (get jira-config %)) required-keys)]
          (if (empty? missing-keys)
            (do
-             (println "   ✅ All required configuration present")
-             (println (str "   🌐 URL: " (:base-url jira-config)))
-             (println (str "   👤 User: " (:username jira-config)))
-             (println (str "   🔑 Token: " (if (get jira-config :api-token) "*****" "Missing")))
+             (println "   [OK] All required configuration present")
+             (println (str "   URL: " (:base-url jira-config)))
+             (println (str "   User: " (:username jira-config)))
+             (println (str "   Token: " (if (get jira-config :api-token) "*****" "Missing")))
              (when-let [project (:default-project jira-config)]
-               (println (str "   📁 Default Project: " project)))
+               (println (str "   Default Project: " project)))
              (swap! results assoc :config-valid true))
            (do
-             (println "   ❌ Configuration incomplete")
+             (println "   [ERROR] Configuration incomplete")
              (doseq [key missing-keys]
-               (println (str "   ⚠️  Missing: " (name key))))
+               (println (str "   Missing: " (name key))))
              (swap! errors conj (str "Missing required configuration: " (clojure.string/join ", " (map name missing-keys)))))))
        (do
-         (println "   ❌ No configuration found")
+         (println "   [ERROR] No configuration found")
          (swap! errors conj "No Jira configuration found")))
 
      (println)
 
      ;; Step 2: Connection Test (only if config is valid)
      (when (:config-valid @results)
-       (println "2️⃣  Connection Test")
+       (println "2. Connection Test")
        (let [connection-result (test-connection jira-config)]
          (if (:success connection-result)
            (do
-             (println (str "   ✅ " (:message connection-result)))
+             (println (str "   [OK] " (:message connection-result)))
              (swap! results assoc :connection-ok true))
            (do
-             (println (str "   ❌ " (:message connection-result)))
+             (println (str "   [ERROR] " (:message connection-result)))
              (swap! errors conj (:message connection-result)))))
        (println))
 
      ;; Step 3: User Information (only if connected)
      (when (:connection-ok @results)
-       (println "3️⃣  User Information")
+       (println "3. User Information")
        (if-let [user-info (get-user-info jira-config)]
          (do
-           (println (str "   ✅ Connected as: " (:displayName user-info)))
-           (println (str "   📧 Email: " (:emailAddress user-info)))
-           (println (str "   🆔 Account ID: " (:accountId user-info)))
+           (println (str "   [OK] Connected as: " (:displayName user-info)))
+           (println (str "   Email: " (:emailAddress user-info)))
+           (println (str "   Account ID: " (:accountId user-info)))
            (when-let [timezone (:timeZone user-info)]
-             (println (str "   🕐 Timezone: " timezone)))
+             (println (str "   Timezone: " timezone)))
            (swap! results assoc :user-info user-info))
          (do
-           (println "   ⚠️  Could not retrieve user information")
+           (println "   [WARN] Could not retrieve user information")
            (swap! warnings conj "User information not available")))
        (println))
 
      ;; Step 4: Test Ticket Fetch (if ticket ID provided and connected)
      (when (and (:connection-ok @results) test-ticket-id)
-       (println (str "4️⃣  Test Ticket Fetch (" test-ticket-id ")"))
+       (println (str "4. Test Ticket Fetch (" test-ticket-id ")"))
        (let [ticket-result (get-ticket jira-config test-ticket-id)]
          (if (:success ticket-result)
            (let [summary (format-ticket-summary (:data ticket-result))]
-             (println "   ✅ Ticket fetched successfully")
-             (println (str "   🎫 " (:key summary) ": " (:summary summary)))
-             (println (str "   📊 Status: " (:status summary)))
-             (println (str "   🏷️  Type: " (:type summary)))
-             (println (str "   👤 Assignee: " (:assignee summary)))
+             (println "   [OK] Ticket fetched successfully")
+             (println (str "   " (:key summary) ": " (:summary summary)))
+             (println (str "   Status: " (:status summary)))
+             (println (str "   Type: " (:type summary)))
+             (println (str "   Assignee: " (:assignee summary)))
              (swap! results assoc :test-ticket-ok true))
            (do
-             (println (str "   ❌ Failed to fetch ticket: " (:error ticket-result)))
+             (println (str "   [ERROR] Failed to fetch ticket: " (:error ticket-result)))
              (swap! errors conj (:error ticket-result)))))
        (println))
 
      ;; Step 5: Sprint Integration Test (only if connected and default project configured)
      (when (and (:connection-ok @results) (:default-project jira-config))
-       (println "5️⃣  Sprint Integration Check")
+       (println "5. Sprint Integration Check")
        (if-let [board (get-board-for-project jira-config (:default-project jira-config))]
          (if-let [sprint (get-current-sprint jira-config (:id board))]
            (do
-             (println (str "   ✅ Active sprint found: " (:name sprint)))
-             (println (str "   📋 Board: " (:name board)))
-             (println (str "   🎯 Sprint State: " (:state sprint)))
+             (println (str "   [OK] Active sprint found: " (:name sprint)))
+             (println (str "   Board: " (:name board)))
+             (println (str "   Sprint State: " (:state sprint)))
              (swap! results assoc :sprint-integration-ok true))
            (do
-             (println "   ⚠️  No active sprint found")
-             (println "   ℹ️  New tickets won't be added to sprint automatically")
+             (println "   [WARN] No active sprint found")
+             (println "   Info: New tickets won't be added to sprint automatically")
              (swap! warnings conj "No active sprint available")))
          (do
-           (println (str "   ⚠️  No board found for project: " (:default-project jira-config)))
+           (println (str "   [WARN] No board found for project: " (:default-project jira-config)))
            (swap! warnings conj (str "Board not found for project: " (:default-project jira-config)))))
        (println))
 
      ;; Summary
-     (println "📋 Summary")
+     (println "Summary")
      (let [total-checks (+ (if (:config-valid @results) 1 0)
                            (if (:connection-ok @results) 1 0)
                            (if (:user-info @results) 1 0)
@@ -455,23 +455,23 @@
                               (if test-ticket-id 1 0)
                               (if (:default-project jira-config) 1 0))]
 
-       (println (str "   ✅ " total-checks "/" possible-checks " checks passed"))
+       (println (str "   " total-checks "/" possible-checks " checks passed"))
 
        (when (seq @errors)
          (println)
-         (println "❌ Errors:")
+         (println "Errors:")
          (doseq [error @errors]
-           (println (str "   • " error))))
+           (println (str "   - " error))))
 
        (when (seq @warnings)
          (println)
-         (println "⚠️  Warnings:")
+         (println "Warnings:")
          (doseq [warning @warnings]
-           (println (str "   • " warning))))
+           (println (str "   - " warning))))
 
        (when (seq @errors)
          (println)
-         (println "💡 Next Steps:")
+         (println "Next Steps:")
          (println "   1. Review the Jira setup guide: docs/jira-guide.md")
          (println "   2. Check your configuration file or environment variables")
          (println "   3. Verify your API token is correct and has proper permissions")
@@ -479,7 +479,7 @@
 
        (when (and (empty? @errors) (:connection-ok @results))
          (println)
-         (println "🎉 Jira integration is working correctly!")
+         (println "Success: Jira integration is working correctly!")
          (println "   You can now create tickets with: c qs \"Your ticket summary\""))
 
        ;; Return structured result

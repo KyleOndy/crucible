@@ -32,6 +32,7 @@
        "Usage: c <command> [options]\n\n"
        "Commands:\n"
        "  help              Show this help\n"
+       "  check             System configuration and status check\n"
        "  jira-check [ticket]  Check Jira configuration and connectivity\n"
        "  l                 Open today's daily log (alias for 'log daily')\n"
        "  log daily         Open today's daily log\n"
@@ -48,7 +49,8 @@
        "Quick Setup:\n"
        "  1. Run: ./setup.sh\n"
        "  2. See docs/setup-guide.md for detailed instructions\n"
-       "  3. Test Jira integration: c jira-check\n\n"
+       "  3. System check: c check\n"
+       "  4. Test Jira integration: c jira-check\n\n"
        "Use 'bb <command>' for convenience aliases (from crucible directory):\n"
        "  bb jira-check     Alias for 'c jira-check'\n"
        "  bb l              Alias for 'c log daily'\n"
@@ -566,7 +568,7 @@
                                               fallback-boards (:fallback-board-ids jira-config)
                                               sprint-pattern (:sprint-name-pattern jira-config)]
 
-                                          (when debug? (println "=== SPRINT DETECTION DEBUG ==="))
+                                          (when debug? (println "--- SPRINT DETECTION DEBUG ---"))
                                           (when debug? (println (str "  Project: " project-key)))
                                           (when debug? (println (str "  Fallback boards: " fallback-boards)))
                                           (when debug? (println (str "  Name pattern: " sprint-pattern)))
@@ -596,7 +598,7 @@
                                                   (do
                                                     (println (str "  No active sprints found (" method ")"))
                                                     (when debug?
-                                                      (println "  💡 Debug suggestions:")
+                                                      (println "  Debug suggestions:")
                                                       (println "     - Check if project key is correct")
                                                       (println "     - Verify user has access to project boards")
                                                       (println "     - Check if sprints are in 'active' state (not future/closed)")
@@ -605,11 +607,11 @@
                                                     nil))))
 
                                             (when (and (not sprint-data) debug?)
-                                              (println "=== TROUBLESHOOTING ===")
+                                              (println "--- TROUBLESHOOTING ---")
                                               (println "  Sprint detection completely failed. Try:")
                                               (println "  1. c jira-check - verify basic connectivity")
                                               (println "  2. Set :sprint-debug true in config for detailed logging")
-                                              (println "  3. Manually find board IDs and set :fallback-data-ids [123 456]")
+                                              (println "  3. Manually find board IDs and set :fallback-board-ids [123 456]")
                                               (println "  4. Set :auto-add-to-sprint false to disable sprint detection")))))
 
                         sprint-added? (when sprint-result
@@ -617,7 +619,7 @@
                                          jira-config
                                          (:id (:sprint sprint-result))
                                          issue-key))]
-                    (println (str "\n✓ Created " issue-key ": " title))
+                    (println (str "\nCreated " issue-key ": " title))
                     (println (str "  URL: " (str/replace (:base-url jira-config) #"/$" "") "/browse/" issue-key))
                     (when sprint-added?
                       (println "  Added to current sprint"))
@@ -632,6 +634,89 @@
                     (println (str "Error: " (:error result)))
                     (System/exit 1)))))))))))
 
+(defn system-check-command
+  "Perform comprehensive system check and show configuration status"
+  []
+  (println "Crucible System Check")
+  (println "====================")
+  (println)
+
+  ;; Configuration Files
+  (println "Configuration Files:")
+  (let [config-status (config/get-config-file-status)]
+    (doseq [[config-type {:keys [path exists readable]}] config-status]
+      (let [status-str (cond
+                         (and exists readable) "[FOUND]"
+                         exists "[FOUND - NOT READABLE]"
+                         :else "[NOT FOUND]")]
+        (println (str "  " (case config-type
+                             :project-config "Project config"
+                             :xdg-config "XDG config"
+                             :legacy-config "Legacy config")
+                      ": " path " " status-str)))))
+  (println)
+
+  ;; Environment Variables  
+  (println "Environment Variables:")
+  (let [env-status (config/get-env-var-status)]
+    (doseq [[var-name {:keys [set value]}] env-status]
+      (let [status-str (if set "[SET]" "[NOT SET]")
+            display-value (when (and set value (not= value "*****"))
+                            (str " = " value))]
+        (println (str "  " var-name ": " status-str display-value)))))
+  (println)
+
+  ;; System Information
+  (println "System Information:")
+  (println (str "  Working directory: " (System/getProperty "user.dir")))
+  (println (str "  User home: " (System/getProperty "user.home")))
+  (println (str "  OS: " (System/getProperty "os.name")))
+  (println (str "  Java version: " (System/getProperty "java.version")))
+  (println)
+
+  ;; Workspace Status
+  (println "Workspace Status:")
+  (let [workspace-dir (or (System/getenv "CRUCIBLE_WORKSPACE_DIR") "workspace")
+        workspace-path (str (System/getProperty "user.dir") "/" workspace-dir)
+        logs-dir (str workspace-path "/logs")
+        tickets-dir (str workspace-path "/tickets")]
+    (println (str "  Workspace directory: " workspace-path " "
+                  (if (fs/exists? workspace-path) "[EXISTS]" "[NOT FOUND]")))
+    (println (str "  Logs directory: " logs-dir " "
+                  (if (fs/exists? logs-dir) "[EXISTS]" "[NOT FOUND]")))
+    (println (str "  Tickets directory: " tickets-dir " "
+                  (if (fs/exists? tickets-dir) "[EXISTS]" "[NOT FOUND]"))))
+  (println)
+
+  ;; Configuration Summary
+  (println "Configuration Summary:")
+  (try
+    (let [config (config/load-config)
+          jira-config (:jira config)]
+      (println "  Configuration loaded successfully")
+      (println (str "  Default project: " (or (:default-project jira-config) "[NOT SET]")))
+      (println (str "  Auto-add to sprint: " (:auto-add-to-sprint jira-config)))
+      (println (str "  Sprint debug: " (:sprint-debug jira-config)))
+      (when (:fallback-board-ids jira-config)
+        (println (str "  Fallback board IDs: " (:fallback-board-ids jira-config)))))
+    (catch Exception e
+      (println "  [ERROR] Failed to load configuration")
+      (println (str "  Error: " (.getMessage e)))))
+  (println)
+
+  ;; Editor Check
+  (println "Editor Check:")
+  (let [editor (or (System/getenv "EDITOR") "not set")]
+    (println (str "  EDITOR environment variable: " editor))
+    (when (not= editor "not set")
+      (try
+        (let [result (process/shell {:out :string :err :string} "which" editor)]
+          (if (= 0 (:exit result))
+            (println (str "  Editor command available: " (str/trim (:out result))))
+            (println "  [WARN] Editor command not found in PATH")))
+        (catch Exception _
+          (println "  [WARN] Could not check editor availability"))))))
+
 (defn dispatch-command
   [command args]
   (case command
@@ -642,6 +727,7 @@
     "pipe" (apply pipe-command args)
     ("quick-story" "qs") (quick-story-command args)
     "jira-check" (apply jira/run-jira-check args)
+    ("check" "system-check") (system-check-command)
     (do
       (println (str "Unknown command: " command))
       (println)
