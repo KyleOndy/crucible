@@ -1,20 +1,47 @@
 (ns lib.ai
   "Simple AI client for content enhancement via SMG gateway"
   (:require
-    [babashka.http-client :as http]
-    [cheshire.core :as json]
-    [clojure.string :as str]))
+   [babashka.http-client :as http]
+   [cheshire.core :as json]
+   [clojure.string :as str]))
 
+(defn substitute-template-vars
+  "Replace template variables in a string with actual values"
+  [template vars]
+  (reduce (fn [text [var-name var-value]]
+            (str/replace text (str "{" (name var-name) "}") (str var-value)))
+          template
+          vars))
+
+(defn build-messages-from-template
+  "Build messages array from configurable template"
+  [template vars]
+  (mapv (fn [msg-template]
+          (-> msg-template
+              (update :content substitute-template-vars vars)))
+        template))
+
+(defn build-messages
+  "Build messages for API request using configurable template"
+  [{:keys [title description]} ai-config]
+  (let [vars {:prompt (:prompt ai-config "You are helpful")
+              :title title
+              :description (or description "")
+              :title_and_description (str "Title: " title
+                                          (when (not (str/blank? description))
+                                            (str "\nDescription: " description)))}
+        template (:message-template ai-config)]
+    (build-messages-from-template template vars)))
 
 (defn enhance-content
   "Send content to AI gateway for enhancement"
   [{:keys [title description]} ai-config]
   (try
     (println "Calling AI gateway...")
-    (let [request-body {:prompt (:prompt ai-config)
-                        :title title
-                        :description description
-                        :format "jira"}
+    (let [messages (build-messages {:title title :description description} ai-config)
+          request-body {:model (:model ai-config "gpt-4")
+                        :max_tokens (:max-tokens ai-config 1024)
+                        :messages messages}
 
           response (http/post (:gateway-url ai-config)
                               {:headers {"Authorization" (str "Bearer " (:api-key ai-config))
@@ -48,7 +75,6 @@
       (println (str "AI enhancement failed: " (.getMessage e)))
       {:title title :description description})))
 
-
 (defn test-gateway
   "Test AI gateway connectivity and authentication"
   [ai-config]
@@ -66,7 +92,6 @@
       {:success false
        :error (.getMessage e)
        :message (str "Cannot reach gateway: " (.getMessage e))})))
-
 
 (defn show-diff
   "Show difference between original and enhanced content"

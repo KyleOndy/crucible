@@ -1,7 +1,7 @@
 
 Need to make an HTTP request.
 
-Needs the follwoing
+Needs the following
 - Headers
     - Bearer token
 - json payload
@@ -11,8 +11,8 @@ Needs the follwoing
 "model": model,
 "max_tokens": 1024,
 "messages": [
-{"role": "assisant", "contnet": "you are helpful"}.
-{"role": "user", "contnet": "knoch knco"}
+{"role": "assistant", "content": "you are helpful"},
+{"role": "user", "content": "knoch knco"}
 ]
 }
 ```
