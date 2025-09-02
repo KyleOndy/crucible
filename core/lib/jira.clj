@@ -153,33 +153,132 @@
   "Find all active sprints across all boards for a project.
    Returns a map with :sprints (unique active sprints) and :board-count"
   [jira-config project-key]
-  (when-let [boards (get-boards-for-project jira-config project-key)]
-    (let [agile-url (str (:base-url jira-config) "/rest/agile/1.0")
-          auth-header (make-auth-header (:username jira-config) (:api-token jira-config))
+  (println (str "DEBUG: Looking for active sprints for project: " project-key))
+  (if-let [boards (get-boards-for-project jira-config project-key)]
+    (do
+      (println (str "DEBUG: Found " (count boards) " boards for project " project-key))
+      (doseq [board boards]
+        (println (str "DEBUG: Board - ID: " (:id board) ", Name: " (:name board) ", Type: " (:type board))))
 
-          ;; Get active sprints from each board
-          sprint-results (for [board boards]
-                           (let [response (http/get
-                                           (str agile-url "/board/" (:id board) "/sprint?state=active")
-                                           {:headers {"Authorization" auth-header
-                                                      "Accept" "application/json"}
-                                            :throw false})]
-                             (when (= 200 (:status response))
-                               (let [body (json/parse-string (:body response) true)]
-                                 (:values body)))))
+      (let [agile-url (str (:base-url jira-config) "/rest/agile/1.0")
+            auth-header (make-auth-header (:username jira-config) (:api-token jira-config))
 
-          ;; Flatten and deduplicate sprints by ID
-          all-sprints (->> sprint-results
-                           (filter some?) ; Remove nil results
-                           (apply concat) ; Flatten the list
-                           (group-by :id) ; Group by sprint ID
-                           (vals) ; Get groups
-                           (map first)) ; Take first from each group (deduplication)
+            ;; Get active sprints from each board
+            sprint-results (for [board boards]
+                             (let [sprint-url (str agile-url "/board/" (:id board) "/sprint?state=active")
+                                   _ (println (str "DEBUG: Checking sprints on board " (:id board) " (" (:name board) ")"))
+                                   response (http/get sprint-url
+                                                      {:headers {"Authorization" auth-header
+                                                                 "Accept" "application/json"}
+                                                       :throw false})]
+                               (println (str "DEBUG: Sprint API response status: " (:status response)))
+                               (when (= 200 (:status response))
+                                 (let [body (json/parse-string (:body response) true)
+                                       sprints (:values body)]
+                                   (println (str "DEBUG: Found " (count sprints) " active sprints on board " (:id board)))
+                                   (doseq [sprint sprints]
+                                     (println (str "DEBUG: Sprint - ID: " (:id sprint) ", Name: " (:name sprint) ", State: " (:state sprint))))
+                                   sprints))))
 
-          board-count (count boards)]
+            ;; Flatten and deduplicate sprints by ID
+            all-sprints (->> sprint-results
+                             (filter some?) ; Remove nil results
+                             (apply concat) ; Flatten the list
+                             (group-by :id) ; Group by sprint ID
+                             (vals) ; Get groups
+                             (map first)) ; Take first from each group (deduplication)
 
-      {:sprints all-sprints
-       :board-count board-count})))
+            board-count (count boards)]
+
+        (println (str "DEBUG: After deduplication, found " (count all-sprints) " unique active sprints"))
+        (doseq [sprint all-sprints]
+          (println (str "DEBUG: Unique Sprint - ID: " (:id sprint) ", Name: " (:name sprint))))
+
+        {:sprints all-sprints
+         :board-count board-count}))
+    (do
+      (println (str "DEBUG: No boards found for project: " project-key))
+      nil)))
+
+(defn get-user-active-sprints
+  "Find active sprints where the user is assigned/participating"
+  [jira-config]
+  (let [user-info (get-user-info jira-config)]
+    (when user-info
+      (let [agile-url (str (:base-url jira-config) "/rest/agile/1.0")
+            auth-header (make-auth-header (:username jira-config) (:api-token jira-config))
+            ;; Search for sprints where user is involved - this might need specific API endpoint
+            ;; For now, return empty as this requires more research into Jira's user sprint API
+            response (http/get
+                      (str agile-url "/sprint?state=active") ; This might not be the right endpoint
+                      {:headers {"Authorization" auth-header
+                                 "Accept" "application/json"}
+                       :throw false})]
+        (when (= 200 (:status response))
+          (let [body (json/parse-string (:body response) true)]
+            (:values body)))))))
+
+(defn find-sprints-by-name-pattern
+  "Find active sprints across all accessible boards matching a name pattern"
+  [jira-config pattern]
+  (when pattern
+    (println (str "DEBUG: Searching for sprints matching pattern: " pattern))
+    ;; This would require getting all boards user can access, then searching sprints
+    ;; For now, placeholder implementation
+    nil))
+
+(defn enhanced-sprint-detection
+  "Enhanced sprint detection with multiple fallback strategies"
+  [jira-config project-key & {:keys [debug fallback-board-ids sprint-name-pattern]}]
+  (let [debug? (or debug (:sprint-debug jira-config false))]
+
+    (when debug? (println (str "DEBUG: Enhanced sprint detection for project: " project-key)))
+
+    ;; Strategy 1: Project-wide detection (existing)
+    (when debug? (println "DEBUG: Trying Strategy 1 - Project-wide sprint detection"))
+    (if-let [result (get-project-active-sprints jira-config project-key)]
+      (do
+        (when debug? (println "DEBUG: Strategy 1 succeeded"))
+        (assoc result :detection-method "project-wide"))
+
+      ;; Strategy 2: Fallback board IDs
+      (do
+        (when debug? (println "DEBUG: Strategy 1 failed, trying Strategy 2 - Fallback board IDs"))
+        (if (and fallback-board-ids (seq fallback-board-ids))
+          (let [agile-url (str (:base-url jira-config) "/rest/agile/1.0")
+                auth-header (make-auth-header (:username jira-config) (:api-token jira-config))
+                sprint-results (for [board-id fallback-board-ids]
+                                 (let [response (http/get
+                                                 (str agile-url "/board/" board-id "/sprint?state=active")
+                                                 {:headers {"Authorization" auth-header
+                                                            "Accept" "application/json"}
+                                                  :throw false})]
+                                   (when debug? (println (str "DEBUG: Checking fallback board " board-id ", status: " (:status response))))
+                                   (when (= 200 (:status response))
+                                     (let [body (json/parse-string (:body response) true)]
+                                       (:values body)))))
+                all-sprints (->> sprint-results
+                                 (filter some?)
+                                 (apply concat)
+                                 (group-by :id)
+                                 (vals)
+                                 (map first))]
+            (when debug? (println (str "DEBUG: Fallback boards found " (count all-sprints) " unique sprints")))
+            (if (seq all-sprints)
+              {:sprints all-sprints
+               :board-count (count fallback-board-ids)
+               :detection-method "fallback-boards"}
+
+              ;; Strategy 3: Sprint name pattern (placeholder)
+              (do
+                (when debug? (println "DEBUG: Strategy 2 failed, trying Strategy 3 - Name pattern matching"))
+                (when debug? (println "DEBUG: Strategy 3 not yet implemented"))
+                nil)))
+
+          ;; No fallback boards configured
+          (do
+            (when debug? (println "DEBUG: No fallback board IDs configured"))
+            nil))))))
 
 (defn add-issue-to-sprint
   "Add an issue to a sprint"

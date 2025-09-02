@@ -559,28 +559,58 @@
                   (let [issue-key (:key result)
                         ;; Try to add to sprint if configured
                         ;; Try to add to sprint if configured - using project-wide sprint detection
+                        ;; Try to add to sprint if configured - using enhanced detection with fallbacks
                         sprint-result (when (:auto-add-to-sprint jira-config)
-                                        (let [sprint-data (jira/get-project-active-sprints
-                                                           jira-config
-                                                           (:default-project jira-config))]
-                                          (when sprint-data
-                                            (let [sprints (:sprints sprint-data)
-                                                  board-count (:board-count sprint-data)]
-                                              (cond
-                                                (= 1 (count sprints))
-                                                (do
-                                                  (println (str "  Found 1 active sprint across " board-count " boards"))
-                                                  {:sprint (first sprints) :method "single-sprint"})
+                                        (let [debug? (:sprint-debug jira-config false)
+                                              project-key (:default-project jira-config)
+                                              fallback-boards (:fallback-board-ids jira-config)
+                                              sprint-pattern (:sprint-name-pattern jira-config)]
 
-                                                (> (count sprints) 1)
-                                                (do
-                                                  (println (str "  Found " (count sprints) " active sprints, using: " (:name (first sprints))))
-                                                  {:sprint (first sprints) :method "multiple-sprints"})
+                                          (when debug? (println "=== SPRINT DETECTION DEBUG ==="))
+                                          (when debug? (println (str "  Project: " project-key)))
+                                          (when debug? (println (str "  Fallback boards: " fallback-boards)))
+                                          (when debug? (println (str "  Name pattern: " sprint-pattern)))
 
-                                                :else
-                                                (do
-                                                  (println (str "  No active sprints found across " board-count " boards"))
-                                                  nil))))))
+                                          (let [sprint-data (jira/enhanced-sprint-detection
+                                                             jira-config
+                                                             project-key
+                                                             :debug debug?
+                                                             :fallback-board-ids fallback-boards
+                                                             :sprint-name-pattern sprint-pattern)]
+                                            (when sprint-data
+                                              (let [sprints (:sprints sprint-data)
+                                                    board-count (:board-count sprint-data)
+                                                    method (:detection-method sprint-data)]
+                                                (cond
+                                                  (= 1 (count sprints))
+                                                  (do
+                                                    (println (str "  Found 1 active sprint across " board-count " boards (" method ")"))
+                                                    {:sprint (first sprints) :method method})
+
+                                                  (> (count sprints) 1)
+                                                  (do
+                                                    (println (str "  Found " (count sprints) " active sprints, using: " (:name (first sprints)) " (" method ")"))
+                                                    {:sprint (first sprints) :method method})
+
+                                                  :else
+                                                  (do
+                                                    (println (str "  No active sprints found (" method ")"))
+                                                    (when debug?
+                                                      (println "  💡 Debug suggestions:")
+                                                      (println "     - Check if project key is correct")
+                                                      (println "     - Verify user has access to project boards")
+                                                      (println "     - Check if sprints are in 'active' state (not future/closed)")
+                                                      (println "     - Consider setting :fallback-board-ids in config")
+                                                      (println "     - Try: c jira-check to test basic connectivity"))
+                                                    nil))))
+
+                                            (when (and (not sprint-data) debug?)
+                                              (println "=== TROUBLESHOOTING ===")
+                                              (println "  Sprint detection completely failed. Try:")
+                                              (println "  1. c jira-check - verify basic connectivity")
+                                              (println "  2. Set :sprint-debug true in config for detailed logging")
+                                              (println "  3. Manually find board IDs and set :fallback-data-ids [123 456]")
+                                              (println "  4. Set :auto-add-to-sprint false to disable sprint detection")))))
 
                         sprint-added? (when sprint-result
                                         (jira/add-issue-to-sprint

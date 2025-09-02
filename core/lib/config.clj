@@ -13,7 +13,10 @@
           :default-issue-type "Task"
           :default-story-points 1
           :auto-assign-self true
-          :auto-add-to-sprint true}
+          :auto-add-to-sprint true
+          :sprint-debug false
+          :fallback-board-ids nil
+          :sprint-name-pattern nil}
 
    :ai {:enabled false
         :gateway-url nil
