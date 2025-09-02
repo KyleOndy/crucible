@@ -558,17 +558,35 @@
                 (if (:success result)
                   (let [issue-key (:key result)
                         ;; Try to add to sprint if configured
-                        sprint-added? (when (:auto-add-to-sprint jira-config)
-                                        (when-let [board (jira/get-board-for-project
-                                                          jira-config
-                                                          (:default-project jira-config))]
-                                          (when-let [sprint (jira/get-current-sprint
-                                                             jira-config
-                                                             (:id board))]
-                                            (jira/add-issue-to-sprint
-                                             jira-config
-                                             (:id sprint)
-                                             issue-key))))]
+                        ;; Try to add to sprint if configured - using project-wide sprint detection
+                        sprint-result (when (:auto-add-to-sprint jira-config)
+                                        (let [sprint-data (jira/get-project-active-sprints
+                                                           jira-config
+                                                           (:default-project jira-config))]
+                                          (when sprint-data
+                                            (let [sprints (:sprints sprint-data)
+                                                  board-count (:board-count sprint-data)]
+                                              (cond
+                                                (= 1 (count sprints))
+                                                (do
+                                                  (println (str "  Found 1 active sprint across " board-count " boards"))
+                                                  {:sprint (first sprints) :method "single-sprint"})
+
+                                                (> (count sprints) 1)
+                                                (do
+                                                  (println (str "  Found " (count sprints) " active sprints, using: " (:name (first sprints))))
+                                                  {:sprint (first sprints) :method "multiple-sprints"})
+
+                                                :else
+                                                (do
+                                                  (println (str "  No active sprints found across " board-count " boards"))
+                                                  nil))))))
+
+                        sprint-added? (when sprint-result
+                                        (jira/add-issue-to-sprint
+                                         jira-config
+                                         (:id (:sprint sprint-result))
+                                         issue-key))]
                     (println (str "\n✓ Created " issue-key ": " title))
                     (println (str "  URL: " (str/replace (:base-url jira-config) #"/$" "") "/browse/" issue-key))
                     (when sprint-added?

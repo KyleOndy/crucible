@@ -135,6 +135,52 @@
             boards (:values body)]
         (first boards)))))
 
+(defn get-boards-for-project
+  "Get all boards for a project"
+  [jira-config project-key]
+  (let [agile-url (str (:base-url jira-config) "/rest/agile/1.0")
+        auth-header (make-auth-header (:username jira-config) (:api-token jira-config))
+        response (http/get
+                  (str agile-url "/board?projectKeyOrId=" project-key)
+                  {:headers {"Authorization" auth-header
+                             "Accept" "application/json"}
+                   :throw false})]
+    (when (= 200 (:status response))
+      (let [body (json/parse-string (:body response) true)]
+        (:values body)))))
+
+(defn get-project-active-sprints
+  "Find all active sprints across all boards for a project.
+   Returns a map with :sprints (unique active sprints) and :board-count"
+  [jira-config project-key]
+  (when-let [boards (get-boards-for-project jira-config project-key)]
+    (let [agile-url (str (:base-url jira-config) "/rest/agile/1.0")
+          auth-header (make-auth-header (:username jira-config) (:api-token jira-config))
+
+          ;; Get active sprints from each board
+          sprint-results (for [board boards]
+                           (let [response (http/get
+                                           (str agile-url "/board/" (:id board) "/sprint?state=active")
+                                           {:headers {"Authorization" auth-header
+                                                      "Accept" "application/json"}
+                                            :throw false})]
+                             (when (= 200 (:status response))
+                               (let [body (json/parse-string (:body response) true)]
+                                 (:values body)))))
+
+          ;; Flatten and deduplicate sprints by ID
+          all-sprints (->> sprint-results
+                           (filter some?) ; Remove nil results
+                           (apply concat) ; Flatten the list
+                           (group-by :id) ; Group by sprint ID
+                           (vals) ; Get groups
+                           (map first)) ; Take first from each group (deduplication)
+
+          board-count (count boards)]
+
+      {:sprints all-sprints
+       :board-count board-count})))
+
 (defn add-issue-to-sprint
   "Add an issue to a sprint"
   [jira-config sprint-id issue-key]
