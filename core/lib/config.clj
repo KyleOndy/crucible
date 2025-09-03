@@ -35,6 +35,7 @@
         :max-tokens 1024
         :timeout-ms 5000
         :prompt "Enhance this Jira ticket for clarity and professionalism. Fix spelling and grammar. Keep the same general meaning but improve readability."
+        :prompt-file nil ; Path to external prompt file (alternative to :prompt)
 
         ;; Message template for API requests - customize roles and content as needed
         ;; Available variables: {prompt}, {title}, {description}, {title_and_description}
@@ -167,6 +168,21 @@
                         {:path path
                          :error (.getMessage e)}))))))
 
+(defn load-prompt-file
+  "Load prompt text from external file, with path expansion support"
+  [prompt-file-path]
+  (when prompt-file-path
+    (let [expanded-path (expand-path prompt-file-path)]
+      (if (fs/exists? expanded-path)
+        (try
+          (slurp expanded-path)
+          (catch Exception e
+            (throw (ex-info (str "Failed to read prompt file: " expanded-path)
+                            {:path expanded-path
+                             :error (.getMessage e)}))))
+        (throw (ex-info (str "Prompt file not found: " expanded-path)
+                        {:path expanded-path}))))))
+
 (defn load-home-config
   "Load config from user's home directory (XDG standard location)"
   []
@@ -240,6 +256,35 @@
     ;; Return config with normalized sprint section
     (assoc config :sprint normalized-sprint)))
 
+(defn resolve-prompt-files
+  "Resolve external prompt files in AI config"
+  [config]
+  (if-let [ai-config (:ai config)]
+    (let [prompt-file (:prompt-file ai-config)
+          prompt (:prompt ai-config)]
+      (cond
+        ;; Both prompt and prompt-file specified - error
+        (and prompt prompt-file (not (str/blank? prompt-file)))
+        (throw (ex-info "Cannot specify both :prompt and :prompt-file in AI config"
+                        {:prompt prompt
+                         :prompt-file prompt-file}))
+
+        ;; Load from external file
+        prompt-file
+        (try
+          (let [loaded-prompt (load-prompt-file prompt-file)]
+            (-> config
+                (assoc-in [:ai :prompt] loaded-prompt)
+                (assoc-in [:ai :prompt-file] prompt-file))) ; Keep file path for debugging
+          (catch Exception e
+            (throw (ex-info (str "Error loading prompt file: " (.getMessage e))
+                            {:prompt-file prompt-file
+                             :cause e}))))
+
+        ;; Use existing prompt or default
+        :else config))
+    config))
+
 (defn load-config
   "Load configuration from all sources with proper precedence"
   []
@@ -249,7 +294,8 @@
       (apply-env-overrides)
       (resolve-pass-references)
       (expand-workspace-paths)
-      (normalize-sprint-config)))
+      (normalize-sprint-config)
+      (resolve-prompt-files)))
 
 (defn validate-jira-config
   "Validate that required Jira configuration is present"

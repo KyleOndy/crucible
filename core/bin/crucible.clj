@@ -845,6 +845,7 @@
         max-tokens (:max-tokens ai-config 1024)
         timeout-ms (:timeout-ms ai-config 5000)
         prompt (:prompt ai-config)
+        prompt-file (:prompt-file ai-config)
         template (:message-template ai-config)
         debug? (:debug ai-config false)]
 
@@ -874,11 +875,22 @@
       (println))
 
     ;; Show prompt if configured
-    (when prompt
-      (println "Custom Prompt:")
-      (println (str "  " (subs prompt 0 (min 80 (count prompt)))
-                    (when (> (count prompt) 80) "...")))
-      (println))
+    ;; Show prompt configuration
+    (cond
+      prompt-file
+      (do
+        (println "Custom Prompt (from file):")
+        (println (str "  File: " prompt-file))
+        (println (str "  Content: " (subs prompt 0 (min 80 (count prompt)))
+                      (when (> (count prompt) 80) "...")))
+        (println))
+
+      prompt
+      (do
+        (println "Custom Prompt:")
+        (println (str "  " (subs prompt 0 (min 80 (count prompt)))
+                      (when (> (count prompt) 80) "...")))
+        (println)))
 
     ;; Check if AI can be used
     (if (and gateway-url api-key)
@@ -957,7 +969,10 @@
         (println "      :api-key \"sk-...\"")
         (println "      :model \"gpt-4\"")
         (println "      :max-tokens 1024")
-        (println "      :debug true}}")))))
+        (println "      :prompt-file \"./prompts/my-custom-prompt.txt\"")
+        (println "      :debug true}}")
+        (println)
+        (println "Example prompt file available at: ./prompts/jira-enhancement-example.txt")))))
 
 (defn dispatch-command
   [command args]
