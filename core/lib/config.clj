@@ -5,6 +5,10 @@
    [clojure.edn :as edn]
    [clojure.string :as str]))
 
+(def default-ai-prompt
+  "Default AI prompt when neither :prompt nor :prompt-file is configured"
+  "Enhance this Jira ticket for clarity and professionalism. Fix spelling and grammar. Keep the same general meaning but improve readability.")
+
 (def default-config
   {:jira {:base-url nil
           :username nil
@@ -34,7 +38,7 @@
         :model "gpt-4"
         :max-tokens 1024
         :timeout-ms 5000
-        :prompt "Enhance this Jira ticket for clarity and professionalism. Fix spelling and grammar. Keep the same general meaning but improve readability."
+        :prompt nil ; Default prompt (set via prompt-file or falls back to built-in) 
         :prompt-file nil ; Path to external prompt file (alternative to :prompt)
 
         ;; Message template for API requests - customize roles and content as needed
@@ -263,14 +267,8 @@
     (let [prompt-file (:prompt-file ai-config)
           prompt (:prompt ai-config)]
       (cond
-        ;; Both prompt and prompt-file specified - error
-        (and prompt prompt-file (not (str/blank? prompt-file)))
-        (throw (ex-info "Cannot specify both :prompt and :prompt-file in AI config"
-                        {:prompt prompt
-                         :prompt-file prompt-file}))
-
-        ;; Load from external file
-        prompt-file
+        ;; Load from external file (prompt-file takes precedence)
+        (and prompt-file (not (str/blank? prompt-file)))
         (try
           (let [loaded-prompt (load-prompt-file prompt-file)]
             (-> config
@@ -281,8 +279,13 @@
                             {:prompt-file prompt-file
                              :cause e}))))
 
-        ;; Use existing prompt or default
-        :else config))
+        ;; Use configured prompt or default
+        prompt
+        config
+
+        ;; Neither prompt nor prompt-file configured - use default
+        :else
+        (assoc-in config [:ai :prompt] default-ai-prompt)))
     config))
 
 (defn load-config
