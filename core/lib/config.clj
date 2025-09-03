@@ -62,10 +62,78 @@
   (if (and (string? value) (str/starts-with? value "pass:"))
     (let [pass-path (subs value 5)]
       (try
-        (let [result (process/shell {:out :string :err :string} "pass" "show" pass-path)]
-          (str/trim (:out result)))
+        ;; First check if pass command exists
+        (let [which-result (try
+                             (process/shell {:out :string :err :string} "which" "pass")
+                             (catch Exception _ nil))]
+          (when-not (and which-result (= 0 (:exit which-result)))
+            (throw (ex-info (str "\nERROR: 'pass' command not found\n\n"
+                                 "The password manager 'pass' is not installed or not in PATH.\n"
+                                 "Please install it first:\n"
+                                 "  • macOS:  brew install pass\n"
+                                 "  • Linux:  apt install pass  (or your distro's package manager)\n"
+                                 "  • Then:   pass init <your-gpg-id>\n\n"
+                                 "Learn more: https://www.passwordstore.org/")
+                            {:pass-path pass-path
+                             :error-type :pass-not-installed}))))
+
+        ;; Try to retrieve the password
+        (let [result (process/shell {:out :string :err :string :continue true}
+                                    "pass" "show" pass-path)]
+          (if (= 0 (:exit result))
+            (str/trim (:out result))
+            ;; Parse the specific error
+            (let [stderr (:err result)
+                  error-msg (cond
+                              (str/includes? stderr "is not in the password store")
+                              (str "\n" (str "ERROR: Password entry not found: " pass-path) "\n\n"
+                                   "The entry '" pass-path "' does not exist in your password store.\n\n"
+                                   "To check available entries:\n"
+                                   "  pass ls\n\n"
+                                   "To add this entry:\n"
+                                   "  pass insert " pass-path "\n\n"
+                                   "Or update your config to use a different entry.")
+
+                              (str/includes? stderr "gpg: decryption failed")
+                              (str "\n" "ERROR: GPG decryption failed" "\n\n"
+                                   "Could not decrypt the password entry.\n"
+                                   "Possible causes:\n"
+                                   "  • GPG key not available or expired\n"
+                                   "  • GPG agent not running\n"
+                                   "  • Wrong GPG key used\n\n"
+                                   "Try:\n"
+                                   "  gpg --list-secret-keys\n"
+                                   "  gpgconf --kill gpg-agent && gpgconf --launch gpg-agent")
+
+                              (str/includes? stderr "not initialized")
+                              (str "\n" "ERROR: Password store not initialized" "\n\n"
+                                   "Your password store has not been initialized.\n\n"
+                                   "To initialize:\n"
+                                   "  pass init <your-gpg-id>\n\n"
+                                   "To find your GPG ID:\n"
+                                   "  gpg --list-secret-keys")
+
+                              :else
+                              (str "\n" (str "ERROR: Failed to retrieve password from pass: " pass-path) "\n\n"
+                                   "Pass command output:\n"
+                                   (when-not (str/blank? stderr)
+                                     (str "  " (str/replace stderr "\n" "\n  ") "\n\n"))
+                                   "To debug:\n"
+                                   "  pass show " pass-path))]
+              (throw (ex-info error-msg
+                              {:pass-path pass-path
+                               :exit-code (:exit result)
+                               :stderr stderr})))))
+
+        (catch clojure.lang.ExceptionInfo e
+          ;; Re-throw our enhanced errors
+          (throw e))
+
         (catch Exception e
-          (throw (ex-info (str "Failed to retrieve password from pass: " pass-path)
+          ;; Catch any other unexpected errors
+          (throw (ex-info (str "\n" "ERROR: Unexpected error using pass" "\n\n"
+                               "Failed to retrieve: " pass-path "\n"
+                               "Error: " (.getMessage e))
                           {:pass-path pass-path
                            :error (.getMessage e)})))))
     value))
