@@ -43,12 +43,35 @@
                         :max_tokens (:max-tokens ai-config 1024)
                         :messages messages}
 
+          ;; Debug: Show request details
+          _ (when (:debug ai-config)
+              (println "\n=== DEBUG: Request Details ===")
+              (println (str "URL: " (:gateway-url ai-config)))
+              (println (str "Model: " (:model request-body)))
+              (println (str "Max tokens: " (:max_tokens request-body)))
+              (println "Messages:")
+              (doseq [msg messages]
+                (println (str "  Role: " (:role msg)))
+                (println (str "  Content: " (subs (:content msg) 0 (min 200 (count (:content msg))))
+                              (when (> (count (:content msg)) 200) "..."))))
+              (println "\nRequest body (JSON):")
+              (println (json/generate-string request-body {:pretty true}))
+              (println "==============================\n"))
+
           response (http/post (:gateway-url ai-config)
                               {:headers {"Authorization" (str "Bearer " (:api-key ai-config))
                                          "Content-Type" "application/json"}
                                :body (json/generate-string request-body)
                                :timeout (:timeout-ms ai-config 5000)
-                               :throw false})]
+                               :throw false})
+
+          ;; Debug: Show response details
+          _ (when (and (:debug ai-config) (not= 200 (:status response)))
+              (println "\n=== DEBUG: Response Details ===")
+              (println (str "Status: " (:status response)))
+              (println (str "Headers: " (:headers response)))
+              (println (str "Body: " (:body response)))
+              (println "==============================\n"))]
 
       (cond
         (= 200 (:status response))
@@ -56,6 +79,20 @@
               enhanced {:title (:enhanced_title result (:title result title))
                         :description (:enhanced_description result (:description result description))}]
           enhanced)
+
+        (= 400 (:status response))
+        (do
+          (println "\n=== ERROR: Bad Request (400) ===")
+          (println "The AI gateway rejected the request. Common causes:")
+          (println "  - Invalid message format")
+          (println "  - Missing required fields")
+          (println "  - Invalid model name")
+          (println "\nResponse body:")
+          (println (:body response))
+          (println "\nTip: Enable debug mode to see full request details:")
+          (println "  Add :debug true to :ai section in config")
+          (println "================================\n")
+          {:title title :description description})
 
         (= 429 (:status response))
         (do
@@ -73,22 +110,51 @@
 
     (catch Exception e
       (println (str "AI enhancement failed: " (.getMessage e)))
+      (when (:debug ai-config)
+        (println "Stack trace:")
+        (.printStackTrace e))
       {:title title :description description})))
 
 (defn test-gateway
   "Test AI gateway connectivity and authentication"
   [ai-config]
   (try
-    (let [response (http/get (str (:gateway-url ai-config) "/health")
+    (let [health-url (str (:gateway-url ai-config) "/health")
+          _ (when (:debug ai-config)
+              (println "\n=== DEBUG: Health Check ===")
+              (println (str "Health URL: " health-url))
+              (println (str "Authorization: Bearer ****"
+                            (when (:api-key ai-config)
+                              (subs (:api-key ai-config)
+                                    (max 0 (- (count (:api-key ai-config)) 4))))))
+              (println "===========================\n"))
+
+          response (http/get health-url
                              {:headers {"Authorization" (str "Bearer " (:api-key ai-config))}
                               :timeout 3000
-                              :throw false})]
+                              :throw false})
+
+          _ (when (:debug ai-config)
+              (println "\n=== DEBUG: Health Response ===")
+              (println (str "Status: " (:status response)))
+              (when (not= 200 (:status response))
+                (println (str "Headers: " (:headers response)))
+                (println (str "Body: " (:body response))))
+              (println "==============================\n"))]
+
       {:success (< (:status response) 400)
        :status (:status response)
        :message (if (< (:status response) 400)
                   "Gateway is accessible"
-                  (str "Gateway error: " (:status response)))})
+                  (str "Gateway error: " (:status response)
+                       (when (:body response)
+                         (str " - " (:body response)))))})
     (catch Exception e
+      (when (:debug ai-config)
+        (println "\n=== DEBUG: Health Check Exception ===")
+        (println (str "Error: " (.getMessage e)))
+        (.printStackTrace e)
+        (println "=====================================\n"))
       {:success false
        :error (.getMessage e)
        :message (str "Cannot reach gateway: " (.getMessage e))})))

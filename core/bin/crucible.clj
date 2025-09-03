@@ -826,13 +826,17 @@
         max-tokens (:max-tokens ai-config 1024)
         timeout-ms (:timeout-ms ai-config 5000)
         prompt (:prompt ai-config)
-        template (:message-template ai-config)]
+        template (:message-template ai-config)
+        debug? (:debug ai-config false)]
 
     ;; Display configuration status
     (println "Configuration Status:")
     (println (str "  Enabled: " (if enabled?
                                   (config/green "[YES]")
                                   (config/yellow "[NO]"))))
+    (println (str "  Debug Mode: " (if debug?
+                                     (config/green "[ON]")
+                                     (config/yellow "[OFF]"))))
     (println (str "  Gateway URL: " (if gateway-url
                                       (str gateway-url " " (config/green "[SET]"))
                                       (config/red "[NOT SET]"))))
@@ -843,6 +847,12 @@
     (println (str "  Max Tokens: " max-tokens))
     (println (str "  Timeout: " timeout-ms "ms"))
     (println)
+
+    ;; Debug mode tip
+    (when-not debug?
+      (println (config/yellow "Tip: Enable debug mode to see detailed request/response information"))
+      (println (config/yellow "     Add :debug true to :ai section in config"))
+      (println))
 
     ;; Show prompt if configured
     (when prompt
@@ -860,7 +870,13 @@
         (let [test-result (ai/test-gateway ai-config)]
           (if (:success test-result)
             (println (config/green "SUCCESS"))
-            (println (config/red (str "FAILED - " (:message test-result)))))
+            (do
+              (println (config/red (str "FAILED - " (:message test-result))))
+              (when (= 400 (:status test-result))
+                (println)
+                (println (config/yellow "  Note: 400 error indicates the gateway rejected the request"))
+                (println (config/yellow "        Common causes: invalid endpoint, authentication, or format"))
+                (println (config/yellow "        Enable debug mode for detailed diagnostics")))))
           (println))
 
         ;; Test enhancement
@@ -883,7 +899,9 @@
               (println (str "    Description: " (:description enhanced))))
             (do
               (println (config/yellow "  AI enhancement returned unchanged content"))
-              (println "  This may indicate an issue with the gateway or configuration"))))
+              (println "  This may indicate an issue with the gateway or configuration")
+              (when-not debug?
+                (println "  Enable debug mode to see the actual API request and response")))))
         (println)
 
         ;; Overall status
@@ -896,7 +914,13 @@
             (println "  Enable for all tickets:  Set :ai :enabled true in config")
             (println "  One-time use:           c qs \"summary\" --ai")
             (println "  Test without creating:   c qs \"summary\" --ai-only"))
-          (println (config/red "  ✗ AI configuration has issues - see errors above"))))
+          (do
+            (println (config/red "  ✗ AI configuration has issues - see errors above"))
+            (when-not debug?
+              (println)
+              (println "To troubleshoot:")
+              (println "  1. Enable debug mode: Add :debug true to :ai section")
+              (println "  2. Run 'c ai-check' again to see detailed diagnostics")))))
 
       ;; Configuration missing
       (do
@@ -913,7 +937,8 @@
         (println "      :gateway-url \"https://api.example.com/v1/enhance\"")
         (println "      :api-key \"sk-...\"")
         (println "      :model \"gpt-4\"")
-        (println "      :max-tokens 1024}}")))))
+        (println "      :max-tokens 1024")
+        (println "      :debug true}}")))))
 
 (defn dispatch-command
   [command args]
