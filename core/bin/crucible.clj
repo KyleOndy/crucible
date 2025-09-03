@@ -530,15 +530,14 @@
                               (when debug? (println (str "  Fallback boards: " fallback-boards)))
                               (when debug? (println (str "  Name pattern: " sprint-pattern)))
 
-                              (let [sprint-data (jira/enhanced-sprint-detection
-                                                 jira-config
-                                                 project-key
-                                                 :debug debug?
-                                                 :fallback-board-ids fallback-boards
-                                                 :sprint-name-pattern sprint-pattern)]
+                              (let [sprint-data (jira/find-sprints jira-config
+                                                                   {:project-key project-key
+                                                                    :debug debug?
+                                                                    :fallback-board-ids fallback-boards
+                                                                    :sprint-name-pattern sprint-pattern})]
                                 ;; DEBUG: Add detailed logging of what enhanced-sprint-detection actually returned
                                 (when debug?
-                                  (println "--- ENHANCED-SPRINT-DETECTION RETURN VALUE DEBUG ---")
+                                  (println "--- FIND-SPRINTS RETURN VALUE DEBUG ---")
                                   (println (str "  Received sprint-data: " sprint-data))
                                   (println (str "  sprint-data type: " (type sprint-data)))
                                   (println (str "  sprint-data nil?: " (nil? sprint-data))))

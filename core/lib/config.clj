@@ -13,10 +13,20 @@
           :default-issue-type "Task"
           :default-story-points 1
           :auto-assign-self true
+          ;; Legacy sprint config (maintained for backward compatibility)
           :auto-add-to-sprint true
           :sprint-debug false
           :fallback-board-ids nil
           :sprint-name-pattern nil}
+
+   ;; Unified sprint detection configuration
+   :sprint {:enabled true
+            :debug false
+            :auto-add-to-ticket true
+            :fallback-board-ids []
+            :name-pattern nil
+            :detection-strategies [:project-wide :fallback-boards :pattern-matching]
+            :timeout-ms 10000}
 
    :ai {:enabled false
         :gateway-url nil
@@ -145,7 +155,33 @@
       (deep-merge (load-project-config))
       (apply-env-overrides)
       (resolve-pass-references)
-      (expand-workspace-paths)))
+      (expand-workspace-paths)
+      (normalize-sprint-config)))
+
+(defn normalize-sprint-config
+  "Normalize sprint configuration to use new unified format with backward compatibility.
+   Migrates legacy :jira sprint settings to new :sprint section."
+  [config]
+  (let [jira-config (:jira config)
+        sprint-config (:sprint config)
+
+        ;; Extract legacy values from jira config
+        legacy-auto-add (:auto-add-to-sprint jira-config)
+        legacy-debug (:sprint-debug jira-config)
+        legacy-fallback-boards (:fallback-board-ids jira-config)
+        legacy-name-pattern (:sprint-name-pattern jira-config)
+
+        ;; Create normalized sprint config (new format takes precedence)
+        normalized-sprint (-> sprint-config
+                              ;; Use legacy values as defaults if new config doesn't specify them
+                              (update :enabled #(if (nil? %) (boolean legacy-auto-add) %))
+                              (update :debug #(if (nil? %) (boolean legacy-debug) %))
+                              (update :auto-add-to-ticket #(if (nil? %) (boolean legacy-auto-add) %))
+                              (update :fallback-board-ids #(if (empty? %) (or legacy-fallback-boards []) %))
+                              (update :name-pattern #(if (nil? %) legacy-name-pattern %)))]
+
+    ;; Return config with normalized sprint section
+    (assoc config :sprint normalized-sprint)))
 
 (defn validate-jira-config
   "Validate that required Jira configuration is present"
