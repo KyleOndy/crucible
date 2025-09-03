@@ -147,17 +147,6 @@
         (update-in [:workspace :tickets-dir] #(str (fs/path root-dir %)))
         (update-in [:workspace :docs-dir] #(str (fs/path root-dir %))))))
 
-(defn load-config
-  "Load configuration from all sources with proper precedence"
-  []
-  (-> default-config
-      (deep-merge (load-home-config))
-      (deep-merge (load-project-config))
-      (apply-env-overrides)
-      (resolve-pass-references)
-      (expand-workspace-paths)
-      (normalize-sprint-config)))
-
 (defn normalize-sprint-config
   "Normalize sprint configuration to use new unified format with backward compatibility.
    Migrates legacy :jira sprint settings to new :sprint section."
@@ -182,6 +171,17 @@
 
     ;; Return config with normalized sprint section
     (assoc config :sprint normalized-sprint)))
+
+(defn load-config
+  "Load configuration from all sources with proper precedence"
+  []
+  (-> default-config
+      (deep-merge (load-home-config))
+      (deep-merge (load-project-config))
+      (apply-env-overrides)
+      (resolve-pass-references)
+      (expand-workspace-paths)
+      (normalize-sprint-config)))
 
 (defn validate-jira-config
   "Validate that required Jira configuration is present"
