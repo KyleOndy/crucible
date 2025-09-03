@@ -523,7 +523,16 @@
         ;; Handle AI-only mode - exit without creating Jira ticket
         (when ai-only
           (println "\n=== AI-ONLY MODE ===")
-          (println "Content enhanced, no Jira ticket created")
+          (let [{:keys [title description]} final-data
+                content-changed? (not= initial-data enhanced-data)]
+            (if content-changed?
+              (println "AI enhanced the content:")
+              (println "AI returned unchanged content:"))
+            (println)
+            (println (str "Title: " title))
+            (println (str "Description: " (if (str/blank? description) "(empty)" description)))
+            (when content-changed?
+              (println "\n(See diff above for changes)")))
           (println "====================")
           (System/exit 0))
 
