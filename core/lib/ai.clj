@@ -102,9 +102,9 @@
         (let [result (json/parse-string (:body response) true)
               enhanced {:title (:enhanced_title result (:title result title))
                         :description (:enhanced_description result (:description result description))}]
-          ;; Show API response when debug is disabled
-          (when (not (:debug ai-config))
-            (println (str "API Response: " (:body response))))
+          ;; Show API response when debug is enabled
+          (when (:debug ai-config)
+            (println (str "\nAPI Response: " (:body response))))
           enhanced)
 
         (= 400 (:status response))
