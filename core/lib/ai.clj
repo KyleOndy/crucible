@@ -100,8 +100,19 @@
       (cond
         (= 200 (:status response))
         (let [result (json/parse-string (:body response) true)
-              enhanced {:title (:enhanced_title result (:title result title))
-                        :description (:enhanced_description result (:description result description))}]
+              ;; Extract content from the correct API response structure
+              content-text (get-in result [:content 0 :text])
+              enhanced (if content-text
+                         ;; Parse the AI response content for enhanced title/description
+                         (try
+                           (let [parsed-content (json/parse-string content-text true)]
+                             {:title (or (:title parsed-content) (:enhanced_title parsed-content) title)
+                              :description (or (:description parsed-content) (:enhanced_description parsed-content) description)})
+                           (catch Exception _
+                             ;; If parsing fails, try to use the content as enhanced description
+                             {:title title :description (or content-text description)}))
+                         ;; Fallback to original content if no content found
+                         {:title title :description description})]
           ;; Show API response when debug is enabled
           (when (:debug ai-config)
             (println (str "\nAPI Response: " (:body response))))
