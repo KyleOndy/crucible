@@ -261,6 +261,15 @@
               (println "Error: -f/--file requires a filename argument")
               (System/exit 1)))
 
+          (or (= arg "-d") (= arg "--desc"))
+          (if (seq rest-args)
+            (do
+              (swap! flags assoc :desc (first rest-args))
+              (reset! arg-iter (rest rest-args)))
+            (do
+              (println "Error: -d/--desc requires a description argument")
+              (System/exit 1)))
+
           (str/starts-with? arg "-")
           (do
             (println (str "Warning: Unknown flag: " arg))
@@ -439,7 +448,7 @@
   [args]
   (let [{:keys [args flags]} (parse-flags args)
         summary (first args)
-        {:keys [editor dry-run file ai no-ai ai-only]} flags]
+        {:keys [editor dry-run file ai no-ai ai-only desc]} flags]
 
     ;; Get initial ticket data from file, editor, or command line
     (let [initial-data (cond
@@ -461,7 +470,7 @@
 
                          ;; Command line input
                          summary
-                         {:title summary :description ""}
+                         {:title summary :description (or desc "")}
 
                          ;; No input provided
                          :else nil)]
@@ -483,6 +492,7 @@
             (println "Error: story summary required")
             (println "Usage: crucible quick-story \"Your story summary\"")
             (println "   or: crucible qs \"Your story summary\"")
+            (println "   or: crucible qs \"Your story summary\" -d \"Description here\"")
             (println "   or: crucible qs -e  (open editor)")
             (println "   or: crucible qs -f filename.md  (from file)")
             (println "   or: crucible qs --ai-only \"test content\"  (AI enhancement only)")
