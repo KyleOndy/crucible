@@ -33,6 +33,7 @@
        "Commands:\n"
        "  help              Show this help\n"
        "  check             System configuration and status check\n"
+       "  ai-check          Check AI configuration and test connectivity\n"
        "  jira-check [ticket]  Check Jira configuration and connectivity\n"
        "  l                 Open today's daily log (alias for 'log daily')\n"
        "  log daily         Open today's daily log\n"
@@ -808,6 +809,112 @@
         (catch Exception _
           (println "  [WARN] Could not check editor availability"))))))
 
+(defn ai-check-command
+  "Check AI configuration and test connectivity"
+  []
+  (println "AI Configuration Check")
+  (println "=====================")
+  (println)
+
+  ;; Load configuration
+  (let [config (config/load-config)
+        ai-config (:ai config)
+        enabled? (:enabled ai-config false)
+        gateway-url (:gateway-url ai-config)
+        api-key (:api-key ai-config)
+        model (:model ai-config "gpt-4")
+        max-tokens (:max-tokens ai-config 1024)
+        timeout-ms (:timeout-ms ai-config 5000)
+        prompt (:prompt ai-config)
+        template (:message-template ai-config)]
+
+    ;; Display configuration status
+    (println "Configuration Status:")
+    (println (str "  Enabled: " (if enabled?
+                                  (config/green "[YES]")
+                                  (config/yellow "[NO]"))))
+    (println (str "  Gateway URL: " (if gateway-url
+                                      (str gateway-url " " (config/green "[SET]"))
+                                      (config/red "[NOT SET]"))))
+    (println (str "  API Key: " (if api-key
+                                  (str "****" (subs api-key (max 0 (- (count api-key) 4))) " " (config/green "[SET]"))
+                                  (config/red "[NOT SET]"))))
+    (println (str "  Model: " model))
+    (println (str "  Max Tokens: " max-tokens))
+    (println (str "  Timeout: " timeout-ms "ms"))
+    (println)
+
+    ;; Show prompt if configured
+    (when prompt
+      (println "Custom Prompt:")
+      (println (str "  " (subs prompt 0 (min 80 (count prompt)))
+                    (when (> (count prompt) 80) "...")))
+      (println))
+
+    ;; Check if AI can be used
+    (if (and gateway-url api-key)
+      (do
+        (println "Gateway Test:")
+        (print "  Testing connectivity... ")
+        (flush)
+        (let [test-result (ai/test-gateway ai-config)]
+          (if (:success test-result)
+            (println (config/green "SUCCESS"))
+            (println (config/red (str "FAILED - " (:message test-result)))))
+          (println))
+
+        ;; Test enhancement
+        (println "Enhancement Test:")
+        (println "  Testing with sample content...")
+        (let [sample {:title "fix login bug"
+                      :description "the login doesnt work when user enters wrong password"}
+              enhanced (ai/enhance-content sample ai-config)]
+          (if (and (not= (:title sample) (:title enhanced))
+                   (not= (:description sample) (:description enhanced)))
+            (do
+              (println (config/green "  AI enhancement working!"))
+              (println)
+              (println "  Original:")
+              (println (str "    Title: " (:title sample)))
+              (println (str "    Description: " (:description sample)))
+              (println)
+              (println "  Enhanced:")
+              (println (str "    Title: " (:title enhanced)))
+              (println (str "    Description: " (:description enhanced))))
+            (do
+              (println (config/yellow "  AI enhancement returned unchanged content"))
+              (println "  This may indicate an issue with the gateway or configuration"))))
+        (println)
+
+        ;; Overall status
+        (println "Overall Status:")
+        (if (:success (ai/test-gateway ai-config))
+          (do
+            (println (config/green "  ✓ AI is properly configured and ready to use"))
+            (println)
+            (println "Usage:")
+            (println "  Enable for all tickets:  Set :ai :enabled true in config")
+            (println "  One-time use:           c qs \"summary\" --ai")
+            (println "  Test without creating:   c qs \"summary\" --ai-only"))
+          (println (config/red "  ✗ AI configuration has issues - see errors above"))))
+
+      ;; Configuration missing
+      (do
+        (println (config/red "Missing Configuration:"))
+        (when-not gateway-url
+          (println "  - Gateway URL is required")
+          (println "    Set :ai :gateway-url \"https://your-gateway.com/api\" in config"))
+        (when-not api-key
+          (println "  - API key is required")
+          (println "    Set :ai :api-key \"your-key\" in config"))
+        (println)
+        (println "Example configuration in ~/.config/crucible/config.edn:")
+        (println "{:ai {:enabled true")
+        (println "      :gateway-url \"https://api.example.com/v1/enhance\"")
+        (println "      :api-key \"sk-...\"")
+        (println "      :model \"gpt-4\"")
+        (println "      :max-tokens 1024}}")))))
+
 (defn dispatch-command
   [command args]
   (case command
@@ -818,6 +925,7 @@
     "pipe" (apply pipe-command args)
     ("quick-story" "qs") (quick-story-command args)
     "jira-check" (apply jira/run-jira-check args)
+    "ai-check" (ai-check-command)
     ("check" "system-check") (system-check-command)
     (do
       (println (str "Unknown command: " command))
