@@ -43,25 +43,43 @@
                         :max_tokens (:max-tokens ai-config 1024)
                         :messages messages}
 
+          ;; Validate and generate JSON
+          json-string (try
+                        (json/generate-string request-body)
+                        (catch Exception e
+                          (println (str "ERROR: Failed to generate JSON: " (.getMessage e)))
+                          (throw e)))
+
           ;; Debug: Show request details
           _ (when (:debug ai-config)
               (println "\n=== DEBUG: Request Details ===")
               (println (str "URL: " (:gateway-url ai-config)))
               (println (str "Model: " (:model request-body)))
               (println (str "Max tokens: " (:max_tokens request-body)))
-              (println "Messages:")
+              (println "\nMessage Structure Validation:")
+              (println (str "  Messages is array? " (vector? messages)))
+              (println (str "  Message count: " (count messages)))
+              (doseq [[idx msg] (map-indexed vector messages)]
+                (println (str "  Message " idx ":"
+                              " has :role? " (contains? msg :role)
+                              ", has :content? " (contains? msg :content)
+                              ", role=" (:role msg))))
+              (println "\nMessages:")
               (doseq [msg messages]
                 (println (str "  Role: " (:role msg)))
                 (println (str "  Content: " (subs (:content msg) 0 (min 200 (count (:content msg))))
                               (when (> (count (:content msg)) 200) "..."))))
-              (println "\nRequest body (JSON):")
+              (println "\nRequest body (Clojure map):")
               (println (json/generate-string request-body {:pretty true}))
+              (println "\nRaw JSON string to be sent:")
+              (println json-string)
+              (println (str "\nJSON byte length: " (count (.getBytes json-string "UTF-8")) " bytes"))
               (println "==============================\n"))
 
           response (http/post (:gateway-url ai-config)
                               {:headers {"Authorization" (str "Bearer " (:api-key ai-config))
                                          "Content-Type" "application/json"}
-                               :body (json/generate-string request-body)
+                               :body json-string
                                :timeout (:timeout-ms ai-config 5000)
                                :throw false})
 
@@ -71,6 +89,12 @@
               (println (str "Status: " (:status response)))
               (println (str "Headers: " (:headers response)))
               (println (str "Body: " (:body response)))
+              (when (= 400 (:status response))
+                (println "\nDiagnostics for 400 error:")
+                (println "1. Check if the JSON structure matches API expectations")
+                (println "2. Verify field names (e.g., max_tokens vs maxTokens)")
+                (println "3. Ensure message roles are valid (system/user/assistant)")
+                (println "4. Check if the model name is supported by the gateway"))
               (println "==============================\n"))]
 
       (cond
@@ -84,9 +108,11 @@
         (do
           (println "\n=== ERROR: Bad Request (400) ===")
           (println "The AI gateway rejected the request. Common causes:")
+          (println "  - Invalid JSON structure")
           (println "  - Invalid message format")
           (println "  - Missing required fields")
           (println "  - Invalid model name")
+          (println "  - Field naming mismatch (max_tokens vs maxTokens)")
           (println "\nResponse body:")
           (println (:body response))
           (println "\nTip: Enable debug mode to see full request details:")
