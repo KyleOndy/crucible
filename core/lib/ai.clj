@@ -145,39 +145,64 @@
   "Test AI gateway connectivity and authentication"
   [ai-config]
   (try
-    (let [health-url (str (:gateway-url ai-config) "/health")
-          _ (when (:debug ai-config)
-              (println "\n=== DEBUG: Health Check ===")
-              (println (str "Health URL: " health-url))
-              (println (str "Authorization: Bearer ****"
-                            (when (:api-key ai-config)
-                              (subs (:api-key ai-config)
-                                    (max 0 (- (count (:api-key ai-config)) 4))))))
-              (println "===========================\n"))
-
-          response (http/get health-url
-                             {:headers {"Authorization" (str "Bearer " (:api-key ai-config))}
-                              :timeout 3000
-                              :throw false})
+    ;; Use a minimal test request to the actual endpoint
+    (let [test-messages [{:role "user" :content "test"}]
+          request-body {:model (:model ai-config "gpt-4")
+                        :max_tokens 10 ; Use minimal tokens for test
+                        :messages test-messages}
+          json-string (json/generate-string request-body)
 
           _ (when (:debug ai-config)
-              (println "\n=== DEBUG: Health Response ===")
+              (println "\n=== DEBUG: Gateway Test Request ===")
+              (println (str "URL: " (:gateway-url ai-config)))
+              (println (str "Test request JSON:"))
+              (println json-string)
+              (println "====================================\n"))
+
+          response (http/post (:gateway-url ai-config)
+                              {:headers {"Authorization" (str "Bearer " (:api-key ai-config))
+                                         "Content-Type" "application/json"}
+                               :body json-string
+                               :timeout (:timeout-ms ai-config 3000)
+                               :throw false})
+
+          _ (when (:debug ai-config)
+              (println "\n=== DEBUG: Gateway Test Response ===")
               (println (str "Status: " (:status response)))
               (when (not= 200 (:status response))
                 (println (str "Headers: " (:headers response)))
                 (println (str "Body: " (:body response))))
-              (println "==============================\n"))]
+              (println "=====================================\n"))]
 
-      {:success (< (:status response) 400)
+      {:success (= 200 (:status response))
        :status (:status response)
-       :message (if (< (:status response) 400)
-                  "Gateway is accessible"
+       :message (cond
+                  (= 200 (:status response))
+                  "Gateway is accessible and working"
+
+                  (= 400 (:status response))
+                  (str "Bad request (400): " (:body response))
+
+                  (= 401 (:status response))
+                  "Authentication failed (401) - check API key"
+
+                  (= 403 (:status response))
+                  "Access forbidden (403) - check permissions"
+
+                  (= 404 (:status response))
+                  "Endpoint not found (404) - check gateway URL"
+
+                  (= 429 (:status response))
+                  "Rate limited (429) - gateway is accessible but rate limited"
+
+                  :else
                   (str "Gateway error: " (:status response)
                        (when (:body response)
                          (str " - " (:body response)))))})
+
     (catch Exception e
       (when (:debug ai-config)
-        (println "\n=== DEBUG: Health Check Exception ===")
+        (println "\n=== DEBUG: Gateway Test Exception ===")
         (println (str "Error: " (.getMessage e)))
         (.printStackTrace e)
         (println "=====================================\n"))
