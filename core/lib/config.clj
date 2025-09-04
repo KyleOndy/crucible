@@ -16,6 +16,8 @@
           :default-project nil
           :default-issue-type "Task"
           :default-story-points 1
+          :story-points-field nil ; Custom field ID for story points (e.g. "customfield_10002")
+          :default-fix-version-id nil ; Fix version ID to set for all tickets (e.g. "10100")
           :auto-assign-self true
           :auto-add-to-sprint true
           :sprint-debug false

@@ -685,10 +685,30 @@
                                        {:accountId (:accountId user-info)})
                              issue-data)
 
+                ;; Add default fix version if configured
+                default-fix-version-id (:default-fix-version-id jira-config)
+                issue-data (if default-fix-version-id
+                             (assoc-in issue-data [:fields :fixVersions]
+                                       [{:id default-fix-version-id}])
+                             issue-data)
+
                 ;; Add custom fields from configuration
                 custom-fields (:custom-fields jira-config {})
-                issue-data (if (seq custom-fields)
-                             (update issue-data :fields merge custom-fields)
+
+                ;; Add default story points if configured and not already in custom fields
+                default-story-points (:default-story-points jira-config)
+                custom-fields-with-story-points
+                (if (and default-story-points
+                         (not (some #(str/includes? (str %) "story") (keys custom-fields))))
+                  ;; Story points field is commonly customfield_10002, but this should be configurable
+                  ;; For now, add it to custom-fields if story-points-field is configured
+                  (if-let [story-points-field (:story-points-field jira-config)]
+                    (assoc custom-fields story-points-field default-story-points)
+                    custom-fields)
+                  custom-fields)
+
+                issue-data (if (seq custom-fields-with-story-points)
+                             (update issue-data :fields merge custom-fields-with-story-points)
                              issue-data)]
 
             ;; Create the issue
