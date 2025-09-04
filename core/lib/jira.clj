@@ -93,6 +93,33 @@
     {:success false
      :error (str "Invalid ticket ID format: " ticket-id ". Expected format: PROJ-1234")}))
 
+(defn get-ticket-full
+  "Fetch complete ticket data from Jira including all custom fields"
+  [jira-config ticket-id]
+  (if-let [parsed-id (parse-ticket-id ticket-id)]
+    (let [response (jira-request jira-config :get (str "/issue/" (:full-id parsed-id)))]
+      (cond
+        (= 200 (:status response))
+        {:success true
+         :data (:body response)} ; Return the full response without filtering
+
+        (= 404 (:status response))
+        {:success false
+         :error (str "Ticket " (:full-id parsed-id) " not found")
+         :status (:status response)}
+
+        (= 401 (:status response))
+        {:success false
+         :error "Authentication failed. Check your Jira credentials."
+         :status (:status response)}
+
+        :else
+        {:success false
+         :error (str "Failed to fetch ticket: " (get-in response [:body :errorMessages]))
+         :status (:status response)}))
+    {:success false
+     :error (str "Invalid ticket ID format: " ticket-id ". Expected format: PROJ-1234")}))
+
 (defn format-ticket-summary
   "Format ticket data for display"
   [{:keys [key fields]}]

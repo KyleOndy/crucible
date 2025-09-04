@@ -738,19 +738,20 @@
         (System/exit 1))
 
       (println (str "Fetching ticket: " ticket-id "..."))
-      (let [result (jira/get-ticket jira-config ticket-id)]
-        (if (:error result)
+      (let [result (jira/get-ticket-full jira-config ticket-id)]
+        (if-not (:success result)
           (do
             (println (str "Error: " (:error result)))
             (System/exit 1))
-          (let [fields (:fields result)
+          (let [data (:data result)
+                fields (:fields data)
                 ;; Separate standard and custom fields
                 standard-fields #{:summary :description :issuetype :status :priority
                                   :assignee :reporter :created :updated :project
                                   :components :labels :fixVersions :versions}
                 custom-fields (filter #(str/starts-with? (name %) "customfield") (keys fields))]
 
-            (println (str "\n=== Ticket: " (:key result) " ==="))
+            (println (str "\n=== Ticket: " (:key data) " ==="))
             (println "\nStandard Fields:")
             (doseq [field-key standard-fields]
               (when-let [value (get fields field-key)]
