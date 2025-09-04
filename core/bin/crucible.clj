@@ -177,13 +177,18 @@
 (defn create-ticket-template
   "Create template for editor"
   ([]
-   (create-ticket-template nil))
+   (create-ticket-template nil nil))
   ([title]
+   (create-ticket-template title nil))
+  ([title description]
    (str (if title (str title "\n") "")
         "\n"
         "# Enter ticket title on first line" (when title " (or edit above)")
         "\n"
-        "# Enter description below (markdown supported)\n"
+        (if description
+          (str description "\n\n")
+          "")
+        "# Enter description " (if description "above (or edit above)" "below") " (markdown supported)\n"
         "# Lines starting with # are comments (ignored)\n"
         "# Save and exit to create ticket, exit without saving to cancel\n")))
 
@@ -200,11 +205,13 @@
 (defn open-ticket-editor
   "Open editor for ticket creation, return parsed content"
   ([]
-   (open-ticket-editor nil))
+   (open-ticket-editor nil nil))
   ([title]
+   (open-ticket-editor title nil))
+  ([title description]
    (let [temp-file (fs/create-temp-file {:prefix "crucible-ticket-"
                                          :suffix ".md"})
-         template (create-ticket-template title)]
+         template (create-ticket-template title description)]
      (try
        (spit (str temp-file) template)
        (launch-editor temp-file)
@@ -466,7 +473,7 @@
 
                          ;; Editor input
                          editor
-                         (open-ticket-editor summary)
+                         (open-ticket-editor summary desc)
 
                          ;; Command line input
                          summary
