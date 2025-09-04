@@ -17,11 +17,11 @@
           :default-issue-type "Task"
           :default-story-points 1
           :auto-assign-self true
-          ;; Legacy sprint config (maintained for backward compatibility)
           :auto-add-to-sprint true
           :sprint-debug false
           :fallback-board-ids nil
-          :sprint-name-pattern nil}
+          :sprint-name-pattern nil
+          :custom-fields {}} ; Map of custom field IDs to values
 
    ;; Unified sprint detection configuration
    :sprint {:enabled true

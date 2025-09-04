@@ -12,7 +12,16 @@
         :default-issue-type "Task"        ; Default issue type: "Task", "Story", "Bug", etc.
         :default-story-points 1           ; Default story points
         :auto-assign-self true            ; Auto-assign new stories to yourself
-        :auto-add-to-sprint true}         ; Auto-add new stories to current sprint
+        :auto-add-to-sprint true          ; Auto-add new stories to current sprint
+        
+        ;; Custom fields (optional)
+        ;; Map custom field IDs to their values for ticket creation
+        ;; Use 'c inspect-ticket TICKET-123' to discover field IDs from existing tickets
+        :custom-fields {;; Examples:
+                        ;; :customfield_11067 "Platform Team"    ; Team field
+                        ;; :customfield_11068 "Backend"          ; Component field
+                        ;; :customfield_10014 5                  ; Story Points field
+                        }}
  
  ;; AI Enhancement (optional - improves ticket content quality)
  :ai {:enabled false                     ; Set to true to enable AI enhancement

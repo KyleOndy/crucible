@@ -33,6 +33,7 @@
        "Commands:\n"
        "  help              Show this help\n"
        "  check             System configuration and status check\n"
+       "  inspect-ticket <id> Inspect a Jira ticket to view all its fields\n"
        "  ai-check          Check AI configuration and test connectivity\n"
        "  jira-check [ticket]  Check Jira configuration and connectivity\n"
        "  l                 Open today's daily log (alias for 'log daily')\n"
@@ -60,6 +61,7 @@
        "Jira Examples:\n"
        "  c jira-check                      Test your Jira configuration\n"
        "  c jira-check PROJ-1234           Test with a specific ticket\n"
+       "  c inspect-ticket PROJ-1234        View all fields of a ticket\n"
        "  c qs \"Fix login timeout issue\"    Create a quick story\n"
        "  c qs -e                           Open editor for ticket creation\n"
        "  c qs -f test-features.md          Create ticket from markdown file\n"
@@ -681,6 +683,12 @@
                 issue-data (if (and user-info (:accountId user-info))
                              (assoc-in issue-data [:fields :assignee]
                                        {:accountId (:accountId user-info)})
+                             issue-data)
+
+                ;; Add custom fields from configuration
+                custom-fields (:custom-fields jira-config {})
+                issue-data (if (seq custom-fields)
+                             (update issue-data :fields merge custom-fields)
                              issue-data)]
 
             ;; Create the issue
@@ -710,6 +718,80 @@
                 (do
                   (println (str "Error: " (:error result)))
                   (System/exit 1))))))))))
+
+(defn inspect-ticket-command
+  "Inspect a Jira ticket to see all its fields including custom fields"
+  [args]
+  (let [ticket-id (first args)]
+    (when-not ticket-id
+      (println "Error: ticket ID required")
+      (println "Usage: crucible inspect-ticket TICKET-123")
+      (System/exit 1))
+
+    (let [config (config/load-config)
+          jira-config (:jira config)]
+
+      ;; Validate configuration
+      (when-not (:base-url jira-config)
+        (println "Error: Jira configuration missing")
+        (println "Please set CRUCIBLE_JIRA_URL or configure in crucible.edn")
+        (System/exit 1))
+
+      (println (str "Fetching ticket: " ticket-id "..."))
+      (let [result (jira/get-ticket jira-config ticket-id)]
+        (if (:error result)
+          (do
+            (println (str "Error: " (:error result)))
+            (System/exit 1))
+          (let [fields (:fields result)
+                ;; Separate standard and custom fields
+                standard-fields #{:summary :description :issuetype :status :priority
+                                  :assignee :reporter :created :updated :project
+                                  :components :labels :fixVersions :versions}
+                custom-fields (filter #(str/starts-with? (name %) "customfield") (keys fields))]
+
+            (println (str "\n=== Ticket: " (:key result) " ==="))
+            (println "\nStandard Fields:")
+            (doseq [field-key standard-fields]
+              (when-let [value (get fields field-key)]
+                (let [display-value (cond
+                                      (map? value) (or (:displayName value)
+                                                       (:name value)
+                                                       (:value value)
+                                                       (str value))
+                                      (sequential? value) (str/join ", " (map #(or (:name %) (str %)) value))
+                                      :else (str value))]
+                  (when (and display-value (not= display-value ""))
+                    (println (str "  " (name field-key) ": " display-value))))))
+
+            (when (seq custom-fields)
+              (println "\nCustom Fields:")
+              (doseq [field-key (sort custom-fields)]
+                (let [value (get fields field-key)
+                      field-name (name field-key)]
+                  (when value
+                    (let [display-value (cond
+                                          (map? value) (or (:value value)
+                                                           (:displayName value)
+                                                           (str value))
+                                          (sequential? value) (str/join ", " (map #(or (:value %) (str %)) value))
+                                          :else (str value))]
+                      (println (str "  " field-name ": " display-value)))))))
+
+            (println "\n=== Configuration Helper ===")
+            (println "To use these custom fields in your config, add to crucible.edn:")
+            (println "```clojure")
+            (println ":jira {:custom-fields {")
+            (when (seq custom-fields)
+              (doseq [field-key (take 3 (sort custom-fields))]
+                (let [value (get fields field-key)
+                      sample-value (cond
+                                     (map? value) (or (:value value) "\"Value Here\"")
+                                     (number? value) value
+                                     :else "\"Value Here\"")]
+                  (println (str "  :" (name field-key) " " sample-value)))))
+            (println "}}")
+            (println "```")))))))
 
 (defn system-check-command
   "Perform comprehensive system check and show configuration status"
@@ -992,6 +1074,7 @@
     ("quick-story" "qs") (quick-story-command args)
     "jira-check" (apply jira/run-jira-check args)
     "ai-check" (ai-check-command)
+    "inspect-ticket" (inspect-ticket-command args)
     ("check" "system-check") (system-check-command)
     (do
       (println (str "Unknown command: " command))
