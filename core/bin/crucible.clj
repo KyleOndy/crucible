@@ -28,104 +28,25 @@
 
 (defn help-text
   []
-  (str "Crucible - AI-powered SRE productivity system\n\n"
-       "Usage: c <command> [options]\n\n"
+  (str "Crucible - SRE productivity system\n\n"
        "Commands:\n"
        "  help              Show this help\n"
-       "  check             System configuration and status check\n"
-       "  inspect-ticket <id> Inspect a Jira ticket to view all its fields\n"
-       "  ai-check          Check AI configuration and test connectivity\n"
-       "  jira-check [ticket]  Check Jira configuration and connectivity\n"
-       "  l                 Open today's daily log (alias for 'log daily')\n"
-       "  log daily         Open today's daily log\n"
-       "  pipe [command]    Pipe stdin to daily log (optionally log the command)\n"
-       "  quick-story <summary>  Create a quick Jira story\n"
-       "  qs <summary>      Alias for quick-story\n\n"
+       "  check             Health check\n"
+       "  inspect-ticket <id> View ticket fields\n"
+       "  jira-check [ticket] Check Jira config\n"
+       "  l                 Open daily log\n"
+       "  pipe [command]    Pipe stdin to log\n"
+       "  qs <summary>      Create Jira story\n\n"
        "Quick Story Options:\n"
-       "  -e, --editor      Open editor for ticket creation (git commit style)\n"
-       "  -f, --file <file> Create ticket from markdown file\n"
-       "  --dry-run         Preview ticket without creating\n"
-       "  --ai              Enable AI enhancement (overrides config)\n"
-       "  --no-ai           Disable AI enhancement (overrides config)\n"
-       "  --ai-only         Test AI enhancement without creating ticket\n"
-       "  --list-drafts     Show available ticket drafts\n"
-       "  --recover <file>  Recover and create ticket from saved draft\n"
-       "  --clean-drafts    Remove old drafts (>7 days)\n\n"
-       "Quick Setup:\n"
-       "  1. Run: ./setup.sh\n"
-       "  2. See docs/setup-guide.md for detailed instructions\n"
-       "  3. System check: c check\n"
-       "  4. Test Jira integration: c jira-check\n\n"
-       "Use 'bb <command>' for convenience aliases (from crucible directory):\n"
-       "  bb jira-check     Alias for 'c jira-check'\n"
-       "  bb l              Alias for 'c log daily'\n"
-       "  bb pipe           Alias for 'c pipe'\n"
-       "  bb qs <summary>   Alias for 'c quick-story'\n\n"
-       "Jira Examples:\n"
-       "  c jira-check                      Test your Jira configuration\n"
-       "  c jira-check PROJ-1234           Test with a specific ticket\n"
-       "  c inspect-ticket PROJ-1234        View all fields of a ticket\n"
-       "  c qs \"Fix login timeout issue\"    Create a quick story\n"
-       "  c qs -e                           Open editor for ticket creation\n"
-       "  c qs -f test-features.md          Create ticket from markdown file\n"
-       "  c qs -e --dry-run                 Preview ticket from editor\n"
-       "  c qs \"fix bug\" --ai               Create AI-enhanced story\n"
-       "  c qs \"fix bug\" --ai-only          Test AI enhancement only\n"
-       "  c qs -e --ai                      Editor + AI enhancement\n"
-       "  c qs --list-drafts                Show available ticket drafts\n"
-       "  c qs --recover draft-2024-12-31-1430-25.md  Recover and create from draft\n"
-       "  c qs --clean-drafts               Remove old drafts (>7 days)\n"
-       "  c quick-story \"Add rate limiting\"  Create a story with full command\n\n"
-       "Editor Mode:\n"
-       "  When using -e/--editor, enter:\n"
-       "  - First line: ticket title\n"
-       "  - Remaining lines: description (markdown supported)\n"
-       "  - Lines starting with # are ignored as comments\n"
-       "  - Save and exit to create ticket, exit without saving to cancel\n\n"
-       "Draft Recovery:\n"
-       "  When using -e/--editor, drafts are automatically saved for recovery:\n"
-       "  - If ticket creation fails, draft is preserved with recovery instructions\n"
-       "  - If ticket creation succeeds, draft is automatically cleaned up\n"
-       "  - Use --list-drafts to see available drafts\n"
-       "  - Use --recover <filename> to create ticket from saved draft\n"
-       "  - Use --clean-drafts to remove drafts older than 7 days\n"
-       "  - Draft files are stored in ./temp/ticket-drafts/\n\n"
-       "AI Enhancement:\n"
-       "  When enabled, sends title/description to AI gateway for:\n"
-       "  - Grammar and spelling correction\n"
-       "  - Clarity and professional tone\n"
-       "  - Preserving original meaning and intent\n"
-       "  Configure in crucible.edn: {:ai {:enabled true :gateway-url \"...\" :api-key \"...\"}}\n"
-       "  Use --ai-only to test prompts without creating Jira tickets\n\n"
-       "Markdown Support in Descriptions:\n"
-       "  **Bold text** → Bold formatting in Jira\n"
-       "  *Italic text* → Italic formatting in Jira\n"
-       "  `inline code` → Code formatting in Jira\n"
-       "  # Header → Large heading\n"
-       "  ## Subtitle → Medium heading\n"
-       "  - List item → Bullet point\n"
-       "  [Link text](https://example.com) → Clickable link\n"
-       "  https://example.com → Auto-linked URL\n"
-       "  PROJ-123 → Auto-linked to Jira ticket\n"
-       "  Double newlines create separate paragraphs\n\n"
-       "Pipe Examples:\n"
-       "  kubectl get pods | c pipe\n"
-       "  ls -la | c pipe \"ls -la\"\n"
-       "  kubectl get pods | c pipe \"kubectl get pods\"\n\n"
-       "Tee-like Behavior (logs AND passes output through):\n"
-       "  kubectl get pods | c pipe \"kubectl get pods\" | grep Running\n"
-       "  ps aux | c pipe \"ps aux\" | head -5\n"
-       "  cat file.txt | c pipe \"cat file.txt\" | sort | uniq\n\n"
-       "For automatic command logging, add this function to your shell profile:\n"
-       "  cpipe() { eval \"$*\" | c pipe \"$*\"; }\n"
-       "Then use: cpipe kubectl get pods\n\n"
-       "cpipe Setup Instructions:\n"
-       "  Bash/Zsh: Add cpipe function to ~/.bashrc or ~/.zshrc\n"
-       "  Fish: Add 'function cpipe; eval $argv | c pipe \"$argv\"; end' to ~/.config/fish/functions/cpipe.fish\n"
-       "  Then restart your shell or run: source ~/.bashrc (or ~/.zshrc)\n\n"
-       "Documentation:\n"
-       "  docs/jira-guide.md    Complete Jira setup and usage guide\n"
-       "  docs/setup-guide.md   System setup and configuration\n"))
+       "  -e, --editor      Open editor\n"
+       "  -f, --file <file> From file\n"
+       "  --dry-run         Preview only\n"
+       "  --ai              Enable AI\n"
+       "  --no-ai           Disable AI\n"
+       "  --ai-only         AI test only\n"
+       "  --list-drafts     Show drafts\n"
+       "  --recover <file>  Recover draft\n"
+       "  --clean-drafts    Clean old drafts\n"))
 
 (defn get-date-info
   "Returns map with formatted date information for template substitution"
@@ -180,15 +101,8 @@
   [file-path]
   (let [editor (System/getenv "EDITOR")]
     (if editor
-      (try
-        @(process/process [editor (str file-path)] {:inherit true})
-        (catch Exception e
-          (println (str "Error launching editor: " (.getMessage e)))
-          (System/exit 1)))
-      (do
-        (println "Error: $EDITOR environment variable not set")
-        (println "Please set $EDITOR to your preferred text editor (e.g., export EDITOR=nano)")
-        (System/exit 1)))))
+      @(process/process [editor (str file-path)] {:inherit true})
+      (System/exit 1))))
 
 (defn ensure-draft-directory
   "Ensure draft directory exists and return path"
@@ -245,8 +159,7 @@
         (when (str/ends-with? (str file) ".md")
           (let [modified-time (fs/last-modified-time file)]
             (when (.isBefore (.toInstant modified-time) cutoff-time)
-              (fs/delete file)
-              (println (str "Cleaned old draft: " (fs/file-name file))))))))))
+              (fs/delete file))))))))
 
 (defn load-draft-content
   "Load content from draft file"
@@ -355,18 +268,14 @@
             (do
               (swap! flags assoc :file (first rest-args))
               (reset! arg-iter (rest rest-args)))
-            (do
-              (println "Error: -f/--file requires a filename argument")
-              (System/exit 1)))
+            (System/exit 1))
 
           (or (= arg "-d") (= arg "--desc"))
           (if (seq rest-args)
             (do
               (swap! flags assoc :desc (first rest-args))
               (reset! arg-iter (rest rest-args)))
-            (do
-              (println "Error: -d/--desc requires a description argument")
-              (System/exit 1)))
+            (System/exit 1))
 
           (= arg "--list-drafts")
           (do
@@ -383,13 +292,11 @@
             (do
               (swap! flags assoc :recover (first rest-args))
               (reset! arg-iter (rest rest-args)))
-            (do
-              (println "Error: --recover requires a draft filename argument")
-              (System/exit 1)))
+            (System/exit 1))
 
           (str/starts-with? arg "-")
           (do
-            (println (str "Warning: Unknown flag: " arg))
+
             (reset! arg-iter rest-args))
 
           :else
@@ -574,18 +481,12 @@
       (let [drafts (get-available-drafts)]
         (if (seq drafts)
           (do
-            (println "Available ticket drafts:")
-            (doseq [draft drafts]
-              (let [age-hours (long (/ (.toMillis (java.time.Duration/between (.toInstant (:modified draft)) (java.time.Instant/now))) 3600000))]
-                (println (str "  " (:filename draft) " (" age-hours "h ago, " (:size draft) " bytes)"))))
-            (println "\nTo recover a draft: c qs --recover <filename>"))
+            (doseq [draft drafts] (println (:filename draft))))
           (println "No ticket drafts found")))
 
       ;; Clean old drafts
       clean-drafts
-      (do
-        (clean-old-drafts)
-        (println "Cleaned old drafts (>7 days)"))
+      (clean-old-drafts)
 
       ;; Recover from draft - create ticket using draft content
       recover
@@ -604,12 +505,8 @@
                 (let [recovered-data (assoc parsed :recovered-from-draft true)]
                   (quick-story-command (concat [(:title recovered-data)]
                                                (when (not (str/blank? (:description recovered-data))) ["-d" (:description recovered-data)])))))
-              (do
-                (println (str "Error: Invalid draft content in " (fs/file-name draft-path)))
-                (System/exit 1))))
-          (do
-            (println (str "Error: Draft file not found: " (fs/file-name draft-path)))
-            (System/exit 1))))
+              (System/exit 1)))
+          (System/exit 1)))
 
       ;; Normal ticket creation logic
       :else
@@ -623,9 +520,7 @@
                                    title (first lines)
                                    description (str/join "\n" (rest lines))]
                                {:title title :description description})
-                             (do
-                               (println (str "Error: File not found: " file))
-                               (System/exit 1)))
+                             (System/exit 1))
 
                            ;; Editor input
                            editor
@@ -815,15 +710,9 @@
 
             ;; Proceed with normal ticket creation
             ;; Validate configuration
-            (when-not (:base-url jira-config)
-              (println "Error: Jira configuration missing")
-              (println "Please set CRUCIBLE_JIRA_URL or configure in crucible.edn")
-              (System/exit 1))
+            (when-not (:base-url jira-config) (System/exit 1))
 
-            (when-not (:default-project jira-config)
-              (println "Error: No default project configured")
-              (println "Please set :jira :default-project in your config file")
-              (System/exit 1))
+            (when-not (:default-project jira-config) (System/exit 1))
 
             ;; Get current user info if auto-assign is enabled
             (let [user-info (when (:auto-assign-self jira-config)
@@ -884,24 +773,10 @@
                                            jira-config
                                            (:id (:sprint sprint-info))
                                            issue-key))]
-                      (println (str "\nCreated " issue-key ": " title))
-                      (println (str "  URL: " (str/replace (:base-url jira-config) #"/$" "") "/browse/" issue-key))
-                      (when sprint-added?
-                        (println "  Added to current sprint"))
-                      (when user-info
-                        (println (str "  Assigned to: " (:displayName user-info))))
-                      (when file
-                        (println (str "  Source: " file " (" (count (str/split-lines description)) " lines)")))
-                      (when ai-enabled
-                        (println "  Enhanced with AI"))
-                      (println (str "\nStart working: c work-on " issue-key))))
+                      (println (str "Created " issue-key))))
                   (do
                     ;; Failure - preserve draft and show recovery info
                     (println (str "Error: " (:error result)))
-                    (when draft-path
-                      (println (str "\nDraft saved for recovery: " draft-path))
-                      (println "To retry with same content:")
-                      (println (str "  c qs --recover " (fs/file-name draft-path))))
                     (System/exit 1)))))))))))
 
 (defn inspect-ticket-command
@@ -979,275 +854,52 @@
             (println "}}")
             (println "```")))))))
 
-(defn system-check-command
-  "Perform comprehensive system check and show configuration status"
+(defn health-check-command
+  "Health check for system, AI, and Jira"
   []
-  (println "Crucible System Check")
-  (println "====================")
-  (println)
-
-  ;; Configuration Files
-  (println "Configuration Files:")
-  (let [config-status (config/get-config-file-status)]
-    (doseq [[config-type {:keys [path exists readable]}] config-status]
-      (let [status-str (cond
-                         (and exists readable) "[FOUND]"
-                         exists "[FOUND - NOT READABLE]"
-                         :else "[NOT FOUND]")]
-        (println (str "  " (case config-type
-                             :project-config "Project config"
-                             :xdg-config "User config")
-                      ": " path " " status-str)))))
-  (println)
-
-  ;; Environment Variables  
-  (println "Environment Variables:")
-  (let [env-status (config/get-env-var-status)]
-    (doseq [[var-name {:keys [set value]}] env-status]
-      (let [status-str (if set "[SET]" "[NOT SET]")
-            display-value (when (and set value (not= value "*****"))
-                            (str " = " value))]
-        (println (str "  " var-name ": " status-str display-value)))))
-  (println)
-
-  ;; System Information
-  (println "System Information:")
-  (println (str "  Working directory: " (System/getProperty "user.dir")))
-  (println (str "  User home: " (System/getProperty "user.home")))
-  (println (str "  OS: " (System/getProperty "os.name")))
-  (println (str "  Java version: " (System/getProperty "java.version")))
-  (println)
-
-  ;; Workspace Status
-  ;; Workspace Status
-  ;; Workspace Status
-  (println "Workspace Status:")
-  (try
-    (let [config (config/load-config)
-          workspace-config (:workspace config)
-          dir-check (config/check-workspace-directories workspace-config)]
-      (println (str "  Configured root directory: " (:root-dir workspace-config) " "
-                    (if (fs/exists? (:root-dir workspace-config)) "[EXISTS]" "[NOT FOUND]")))
-      (println (str "  Configured logs directory: " (:logs-dir workspace-config) " "
-                    (if (fs/exists? (:logs-dir workspace-config)) "[EXISTS]" "[NOT FOUND]")))
-      (println (str "  Configured tickets directory: " (:tickets-dir workspace-config) " "
-                    (if (fs/exists? (:tickets-dir workspace-config)) "[EXISTS]" "[NOT FOUND]")))
-      (println (str "  Configured docs directory: " (:docs-dir workspace-config) " "
-                    (if (fs/exists? (:docs-dir workspace-config)) "[EXISTS]" "[NOT FOUND]")))
-
-      ;; Offer to create missing directories
-      (when (> (:missing-dirs dir-check) 0)
-        (println)
-        (println (str "  [INFO] " (:missing-dirs dir-check) " of " (:total-dirs dir-check) " workspace directories are missing"))
-        (println "  Missing directories:")
-        (doseq [{:keys [description path]} (:missing-list dir-check)]
-          (println (str "    - " description ": " path)))
-        (println)
-        (print "  Create missing directories? [y/N]: ")
-        (flush)
-        (let [response (read-line)]
-          (when (and response (or (= (str/lower-case response) "y")
-                                  (= (str/lower-case response) "yes")))
-            (println "  Creating directories...")
-            (let [creation-results (config/ensure-workspace-directories workspace-config)]
-              (doseq [[dir-key result] creation-results]
-                (cond
-                  (:created result)
-                  (println (str "    [CREATED] " (:description result) ": " (:path result)))
-
-                  (and (not (:created result)) (:exists result))
-                  nil ; Already existed, don't print anything
-
-                  :else
-                  (println (str "    [ERROR] Failed to create " (:path result)
-                                (when (:error result) (str ": " (:error result)))))))
-              (println "  Directory creation complete."))))))
-    (catch Exception e
-      (println "  [ERROR] Could not load workspace configuration")
-      (println (str "  Error: " (.getMessage e)))))
-  (println)
-
-  ;; Configuration Summary
-  ;; Configuration Summary
-  (println "Configuration Summary:")
-  (try
-    (let [config (config/load-config)
-          jira-config (:jira config)
-          workspace-config (:workspace config)]
-      (println "  Configuration loaded successfully")
-      (println (str "  Default project: " (or (:default-project jira-config) "[NOT SET]")))
-      (println (str "  Auto-add to sprint: " (:auto-add-to-sprint jira-config)))
-      (println (str "  Sprint debug: " (:sprint-debug jira-config)))
-      (when (:fallback-board-ids jira-config)
-        (println (str "  Fallback board IDs: " (:fallback-board-ids jira-config))))
-      (println "  Workspace configuration:")
-      (println (str "    Root dir: " (:root-dir workspace-config)))
-      (println (str "    Logs dir: " (:logs-dir workspace-config)))
-      (println (str "    Tickets dir: " (:tickets-dir workspace-config)))
-      (println (str "    Docs dir: " (:docs-dir workspace-config))))
-    (catch Exception e
-      (println "  [ERROR] Failed to load configuration")
-      (println (str "  Error: " (.getMessage e)))))
-  (println)
-
-  ;; Editor Check
-  (println "Editor Check:")
-  (let [editor (or (System/getenv "EDITOR") "not set")]
-    (println (str "  EDITOR environment variable: " editor))
-    (when (not= editor "not set")
-      (try
-        (let [result (process/shell {:out :string :err :string} "which" editor)]
-          (if (= 0 (:exit result))
-            (println (str "  Editor command available: " (str/trim (:out result))))
-            (println "  [WARN] Editor command not found in PATH")))
-        (catch Exception _
-          (println "  [WARN] Could not check editor availability"))))))
-
-(defn ai-check-command
-  "Check AI configuration and test connectivity"
-  []
-  (println "AI Configuration Check")
-  (println "=====================")
-  (println)
-
-  ;; Load configuration
   (let [config (config/load-config)
-        ai-config (:ai config)
-        enabled? (:enabled ai-config false)
-        gateway-url (:gateway-url ai-config)
-        api-key (:api-key ai-config)
-        model (:model ai-config "gpt-4")
-        max-tokens (:max-tokens ai-config 1024)
-        timeout-ms (:timeout-ms ai-config 5000)
-        prompt (:prompt ai-config)
-        prompt-file (:prompt-file ai-config)
-        template (:message-template ai-config)
-        debug? (:debug ai-config false)]
+        jira-config (:jira config)
+        ai-config (:ai config)]
+    ;; System
+    (println "System:")
+    (println (str "  Config: " (if config "OK" "ERROR")))
+    (println (str "  Jira URL: " (if (:base-url jira-config) "OK" "MISSING")))
+    (println (str "  Jira Project: " (or (:default-project jira-config) "MISSING")))
 
-    ;; Display configuration status
-    (println "Configuration Status:")
-    (println (str "  Enabled: " (if enabled?
-                                  (config/green "[YES]")
-                                  (config/yellow "[NO]"))))
-    (println (str "  Debug Mode: " (if debug?
-                                     (config/green "[ON]")
-                                     (config/yellow "[OFF]"))))
-    (println (str "  Gateway URL: " (if gateway-url
-                                      (str gateway-url " " (config/green "[SET]"))
-                                      (config/red "[NOT SET]"))))
-    (println (str "  API Key: " (if api-key
-                                  (str "****" (subs api-key (max 0 (- (count api-key) 4))) " " (config/green "[SET]"))
-                                  (config/red "[NOT SET]"))))
-    (println (str "  Model: " model))
-    (println (str "  Max Tokens: " max-tokens))
-    (println (str "  Timeout: " timeout-ms "ms"))
-    (println)
+    ;; AI
+    (println "AI:")
+    (let [ai-enabled (:enabled ai-config)
+          has-url (:gateway-url ai-config)
+          has-key (:api-key ai-config)]
+      (println (str "  Enabled: " (if ai-enabled "YES" "NO")))
+      (when ai-enabled
+        (println (str "  Config: " (if (and has-url has-key) "OK" "MISSING")))))
 
-    ;; Debug mode tip
-    (when-not debug?
-      (println (config/yellow "Tip: Enable debug mode to see detailed request/response information"))
-      (println (config/yellow "     Add :debug true to :ai section in config"))
-      (println))
+    ;; Jira test
+    (println "Jira:")
+    (if (and (:base-url jira-config) (:username jira-config) (:api-token jira-config))
+      (let [result (jira/test-connection jira-config)]
+        (println (str "  Connection: " (if (:success result) "OK" "FAILED"))))
+      (println "  Connection: MISSING CONFIG"))))
 
-    ;; Show prompt if configured
-    ;; Show prompt configuration
-    (cond
-      prompt-file
-      (do
-        (println "Custom Prompt (from file):")
-        (println (str "  File: " prompt-file))
-        (println (str "  Content: " (subs prompt 0 (min 80 (count prompt)))
-                      (when (> (count prompt) 80) "...")))
-        (println))
-
-      prompt
-      (do
-        (println "Custom Prompt:")
-        (println (str "  " (subs prompt 0 (min 80 (count prompt)))
-                      (when (> (count prompt) 80) "...")))
-        (println)))
-
-    ;; Check if AI can be used
-    (if (and gateway-url api-key)
-      (do
-        (println "Gateway Test:")
-        (print "  Testing connectivity... ")
-        (flush)
-        (let [test-result (ai/test-gateway ai-config)]
-          (if (:success test-result)
-            (println (config/green "SUCCESS"))
-            (do
-              (println (config/red (str "FAILED - " (:message test-result))))
-              (when (= 400 (:status test-result))
-                (println)
-                (println (config/yellow "  Note: 400 error indicates the gateway rejected the request"))
-                (println (config/yellow "        Common causes: invalid endpoint, authentication, or format"))
-                (println (config/yellow "        Enable debug mode for detailed diagnostics")))))
-          (println))
-
-        ;; Test enhancement
-        (println "Enhancement Test:")
-        (println "  Testing with sample content...")
-        (let [sample {:title "fix login bug"
-                      :description "the login doesnt work when user enters wrong password"}
-              enhanced (ai/enhance-content sample ai-config)]
-          (if (and (not= (:title sample) (:title enhanced))
-                   (not= (:description sample) (:description enhanced)))
-            (do
-              (println (config/green "  AI enhancement working!"))
-              (println)
-              (println "  Original:")
-              (println (str "    Title: " (:title sample)))
-              (println (str "    Description: " (:description sample)))
-              (println)
-              (println "  Enhanced:")
-              (println (str "    Title: " (:title enhanced)))
-              (println (str "    Description: " (:description enhanced))))
-            (do
-              (println (config/yellow "  AI enhancement returned unchanged content"))
-              (println "  This may indicate an issue with the gateway or configuration")
-              (when-not debug?
-                (println "  Enable debug mode to see the actual API request and response")))))
-        (println)
-
-        ;; Overall status
-        (println "Overall Status:")
-        (if (:success (ai/test-gateway ai-config))
-          (do
-            (println (config/green "  ✓ AI is properly configured and ready to use"))
-            (println)
-            (println "Usage:")
-            (println "  Enable for all tickets:  Set :ai :enabled true in config")
-            (println "  One-time use:           c qs \"summary\" --ai")
-            (println "  Test without creating:   c qs \"summary\" --ai-only"))
-          (do
-            (println (config/red "  ✗ AI configuration has issues - see errors above"))
-            (when-not debug?
-              (println)
-              (println "To troubleshoot:")
-              (println "  1. Enable debug mode: Add :debug true to :ai section")
-              (println "  2. Run 'c ai-check' again to see detailed diagnostics")))))
-
-      ;; Configuration missing
-      (do
-        (println (config/red "Missing Configuration:"))
-        (when-not gateway-url
-          (println "  - Gateway URL is required")
-          (println "    Set :ai :gateway-url \"https://your-gateway.com/api\" in config"))
-        (when-not api-key
-          (println "  - API key is required")
-          (println "    Set :ai :api-key \"your-key\" in config"))
-        (println)
-        (println "Example configuration in ~/.config/crucible/config.edn:")
-        (println "{:ai {:enabled true")
-        (println "      :gateway-url \"https://api.example.com/v1/enhance\"")
-        (println "      :api-key \"sk-...\"")
-        (println "      :model \"gpt-4\"")
-        (println "      :max-tokens 1024")
-        (println "      :prompt-file \"./prompts/my-custom-prompt.txt\"")
-        (println "      :debug true}}")
-        (println)
-        (println "Example prompt file available at: ./prompts/jira-enhancement-example.txt")))))
+(defn inspect-ticket-command
+  "Show key ticket fields"
+  [args]
+  (let [ticket-id (first args)]
+    (if-not ticket-id
+      (println "Error: ticket ID required")
+      (let [config (config/load-config)
+            jira-config (:jira config)
+            result (jira/get-ticket-full jira-config ticket-id)]
+        (if-not (:success result)
+          (println (str "Error: " (:error result)))
+          (let [data (:data result)
+                fields (:fields data)]
+            (println (str "Ticket: " (:key data)))
+            (println (str "Summary: " (:summary fields)))
+            (println (str "Status: " (get-in fields [:status :name])))
+            (println (str "Assignee: " (get-in fields [:assignee :displayName])))
+            (println (str "Project: " (get-in fields [:project :key])))))))))
 
 (defn dispatch-command
   [command args]
@@ -1259,9 +911,8 @@
     "pipe" (apply pipe-command args)
     ("quick-story" "qs") (quick-story-command args)
     "jira-check" (apply jira/run-jira-check args)
-    "ai-check" (ai-check-command)
     "inspect-ticket" (inspect-ticket-command args)
-    ("check" "system-check") (system-check-command)
+    ("check" "health-check") (health-check-command)
     (do
       (println (str "Unknown command: " command))
       (println)
