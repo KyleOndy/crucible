@@ -47,7 +47,10 @@
        "  --dry-run         Preview ticket without creating\n"
        "  --ai              Enable AI enhancement (overrides config)\n"
        "  --no-ai           Disable AI enhancement (overrides config)\n"
-       "  --ai-only         Test AI enhancement without creating ticket\n\n"
+       "  --ai-only         Test AI enhancement without creating ticket\n"
+       "  --list-drafts     Show available ticket drafts\n"
+       "  --recover <file>  Recover and create ticket from saved draft\n"
+       "  --clean-drafts    Remove old drafts (>7 days)\n\n"
        "Quick Setup:\n"
        "  1. Run: ./setup.sh\n"
        "  2. See docs/setup-guide.md for detailed instructions\n"
@@ -69,6 +72,9 @@
        "  c qs \"fix bug\" --ai               Create AI-enhanced story\n"
        "  c qs \"fix bug\" --ai-only          Test AI enhancement only\n"
        "  c qs -e --ai                      Editor + AI enhancement\n"
+       "  c qs --list-drafts                Show available ticket drafts\n"
+       "  c qs --recover draft-2024-12-31-1430-25.md  Recover and create from draft\n"
+       "  c qs --clean-drafts               Remove old drafts (>7 days)\n"
        "  c quick-story \"Add rate limiting\"  Create a story with full command\n\n"
        "Editor Mode:\n"
        "  When using -e/--editor, enter:\n"
@@ -76,6 +82,14 @@
        "  - Remaining lines: description (markdown supported)\n"
        "  - Lines starting with # are ignored as comments\n"
        "  - Save and exit to create ticket, exit without saving to cancel\n\n"
+       "Draft Recovery:\n"
+       "  When using -e/--editor, drafts are automatically saved for recovery:\n"
+       "  - If ticket creation fails, draft is preserved with recovery instructions\n"
+       "  - If ticket creation succeeds, draft is automatically cleaned up\n"
+       "  - Use --list-drafts to see available drafts\n"
+       "  - Use --recover <filename> to create ticket from saved draft\n"
+       "  - Use --clean-drafts to remove drafts older than 7 days\n"
+       "  - Draft files are stored in ./temp/ticket-drafts/\n\n"
        "AI Enhancement:\n"
        "  When enabled, sends title/description to AI gateway for:\n"
        "  - Grammar and spelling correction\n"
@@ -176,6 +190,70 @@
         (println "Please set $EDITOR to your preferred text editor (e.g., export EDITOR=nano)")
         (System/exit 1)))))
 
+(defn ensure-draft-directory
+  "Ensure draft directory exists and return path"
+  []
+  (let [draft-dir (str (fs/cwd) "/temp/ticket-drafts")]
+    (fs/create-dirs draft-dir)
+    draft-dir))
+
+(defn save-draft-copy
+  "Save copy of ticket content to draft directory, return draft path"
+  [content]
+  (let [draft-dir (ensure-draft-directory)
+        now (LocalDateTime/now)
+        formatter (DateTimeFormatter/ofPattern "yyyy-MM-dd-HHmm-ss")
+        draft-filename (str "draft-" (.format now formatter) ".md")
+        draft-path (str draft-dir "/" draft-filename)]
+    (spit draft-path content)
+    draft-path))
+
+(defn cleanup-draft
+  "Remove draft file if it exists"
+  [draft-path]
+  (when (and draft-path (fs/exists? draft-path))
+    (fs/delete draft-path)))
+
+(defn get-available-drafts
+  "List available draft files with metadata"
+  []
+  (let [draft-dir (ensure-draft-directory)]
+    (if (fs/exists? draft-dir)
+      (->> (fs/list-dir draft-dir)
+           (filter #(str/ends-with? (str %) ".md"))
+           (map (fn [path]
+                  (let [filename (fs/file-name path)
+                        size (fs/size path)
+                        modified (fs/last-modified-time path)]
+                    {:path (str path)
+                     :filename filename
+                     :size size
+                     :modified modified})))
+           (sort-by :modified)
+           reverse)
+      [])))
+
+(defn clean-old-drafts
+  "Remove draft files older than specified days (default 7)"
+  [& {:keys [days] :or {days 7}}]
+  (let [draft-dir (ensure-draft-directory)
+        cutoff-time (-> (LocalDateTime/now)
+                        (.minusDays days)
+                        (.toInstant (java.time.ZoneOffset/UTC)))]
+    (when (fs/exists? draft-dir)
+      (doseq [file (fs/list-dir draft-dir)]
+        (when (str/ends-with? (str file) ".md")
+          (let [modified-time (fs/last-modified-time file)]
+            (when (.isBefore (.toInstant modified-time) cutoff-time)
+              (fs/delete file)
+              (println (str "Cleaned old draft: " (fs/file-name file))))))))))
+
+(defn load-draft-content
+  "Load content from draft file"
+  [draft-path]
+  (when (fs/exists? draft-path)
+    (slurp draft-path)))
+
 (defn create-ticket-template
   "Create template for editor"
   ([]
@@ -204,8 +282,14 @@
       {:title (first non-empty-lines)
        :description (str/join "\n" (rest non-empty-lines))})))
 
+(defn parse-draft-content
+  "Parse content from draft file into title and description"
+  [content]
+  (when content
+    (parse-editor-content content)))
+
 (defn open-ticket-editor
-  "Open editor for ticket creation, return parsed content"
+  "Open editor for ticket creation, return parsed content with draft path"
   ([]
    (open-ticket-editor nil nil))
   ([title]
@@ -220,7 +304,12 @@
        (let [content (slurp (str temp-file))
              parsed (parse-editor-content content)]
          (fs/delete temp-file)
-         parsed)
+         (if parsed
+           ;; Save draft copy for recovery and add draft path to result
+           (let [draft-path (save-draft-copy content)]
+             (assoc parsed :draft-path draft-path))
+           ;; No valid content, don't save draft
+           nil))
        (catch Exception e
          (when (fs/exists? temp-file)
            (fs/delete temp-file))
@@ -277,6 +366,25 @@
               (reset! arg-iter (rest rest-args)))
             (do
               (println "Error: -d/--desc requires a description argument")
+              (System/exit 1)))
+
+          (= arg "--list-drafts")
+          (do
+            (swap! flags assoc :list-drafts true)
+            (reset! arg-iter rest-args))
+
+          (= arg "--clean-drafts")
+          (do
+            (swap! flags assoc :clean-drafts true)
+            (reset! arg-iter rest-args))
+
+          (= arg "--recover")
+          (if (seq rest-args)
+            (do
+              (swap! flags assoc :recover (first rest-args))
+              (reset! arg-iter (rest rest-args)))
+            (do
+              (println "Error: --recover requires a draft filename argument")
               (System/exit 1)))
 
           (str/starts-with? arg "-")
@@ -457,287 +565,344 @@
   [args]
   (let [{:keys [args flags]} (parse-flags args)
         summary (first args)
-        {:keys [editor dry-run file ai no-ai ai-only desc]} flags]
+        {:keys [editor dry-run file ai no-ai ai-only desc list-drafts clean-drafts recover]} flags]
 
-    ;; Get initial ticket data from file, editor, or command line
-    (let [initial-data (cond
-                         ;; File input
-                         file
-                         (if (fs/exists? file)
-                           (let [content (slurp file)
-                                 lines (str/split-lines content)
-                                 title (first lines)
-                                 description (str/join "\n" (rest lines))]
-                             {:title title :description description})
-                           (do
-                             (println (str "Error: File not found: " file))
-                             (System/exit 1)))
-
-                         ;; Editor input
-                         editor
-                         (open-ticket-editor summary desc)
-
-                         ;; Command line input
-                         summary
-                         {:title summary :description (or desc "")}
-
-                         ;; No input provided
-                         :else nil)]
-
-      (when-not initial-data
-        (cond
-          editor
+    ;; Handle draft management commands first
+    (cond
+      ;; List available drafts
+      list-drafts
+      (let [drafts (get-available-drafts)]
+        (if (seq drafts)
           (do
-            (println "Editor cancelled or no content provided")
-            (System/exit 0))
+            (println "Available ticket drafts:")
+            (doseq [draft drafts]
+              (let [age-hours (long (/ (.toMillis (java.time.Duration/between (.toInstant (:modified draft)) (java.time.Instant/now))) 3600000))]
+                (println (str "  " (:filename draft) " (" age-hours "h ago, " (:size draft) " bytes)"))))
+            (println "\nTo recover a draft: c qs --recover <filename>"))
+          (println "No ticket drafts found")))
 
-          file
-          (do
-            (println (str "Error reading file: " file))
-            (System/exit 1))
+      ;; Clean old drafts
+      clean-drafts
+      (do
+        (clean-old-drafts)
+        (println "Cleaned old drafts (>7 days)"))
 
-          :else
+      ;; Recover from draft - create ticket using draft content
+      recover
+      (let [draft-dir (ensure-draft-directory)
+            draft-path (if (str/starts-with? recover "/")
+                         recover
+                         (str draft-dir "/" recover))
+            content (load-draft-content draft-path)]
+        (if content
+          (let [parsed (parse-draft-content content)]
+            (if parsed
+              (do
+                (println (str "Recovering draft from: " (fs/file-name draft-path)))
+                ;; Use recovered data as initial-data and continue normally
+                ;; but mark it so we don't save another draft
+                (let [recovered-data (assoc parsed :recovered-from-draft true)]
+                  (quick-story-command (concat [(:title recovered-data)]
+                                               (when (not (str/blank? (:description recovered-data))) ["-d" (:description recovered-data)])))))
+              (do
+                (println (str "Error: Invalid draft content in " (fs/file-name draft-path)))
+                (System/exit 1))))
           (do
-            (println "Error: story summary required")
-            (println "Usage: crucible quick-story \"Your story summary\"")
-            (println "   or: crucible qs \"Your story summary\"")
-            (println "   or: crucible qs \"Your story summary\" -d \"Description here\"")
-            (println "   or: crucible qs -e  (open editor)")
-            (println "   or: crucible qs -f filename.md  (from file)")
-            (println "   or: crucible qs --ai-only \"test content\"  (AI enhancement only)")
+            (println (str "Error: Draft file not found: " (fs/file-name draft-path)))
             (System/exit 1))))
 
-      ;; Load config for AI settings and sprint detection
-      (let [config (config/load-config)
-            jira-config (:jira config)
-            ai-config (:ai config)
-            ai-enabled (and (not no-ai)
-                            (or ai ai-only (:enabled ai-config false))
-                            (:gateway-url ai-config))
+      ;; Normal ticket creation logic
+      :else
+      ;; Get initial ticket data from file, editor, or command line
+      (let [initial-data (cond
+                           ;; File input
+                           file
+                           (if (fs/exists? file)
+                             (let [content (slurp file)
+                                   lines (str/split-lines content)
+                                   title (first lines)
+                                   description (str/join "\n" (rest lines))]
+                               {:title title :description description})
+                             (do
+                               (println (str "Error: File not found: " file))
+                               (System/exit 1)))
 
-            ;; Apply AI enhancement if enabled
-            enhanced-data (if ai-enabled
-                            (do
-                              (println "Enhancing content with AI...")
-                              (ai/enhance-content initial-data ai-config))
-                            initial-data)
+                           ;; Editor input
+                           editor
+                           (open-ticket-editor summary desc)
 
-            ;; Show AI changes if any
-            _ (when (and ai-enabled (not= initial-data enhanced-data))
-                (ai/show-diff initial-data enhanced-data))
+                           ;; Command line input
+                           summary
+                           {:title summary :description (or desc "")}
 
-            ;; Final data to use
-            final-data enhanced-data]
+                           ;; No input provided
+                           :else nil)]
 
-        ;; Handle AI-only mode - exit without creating Jira ticket
-        (when ai-only
-          (println "\n=== AI-ONLY MODE ===")
-          (let [{:keys [title description]} final-data
-                content-changed? (not= initial-data enhanced-data)]
-            (if content-changed?
-              (println "AI enhanced the content:")
-              (println "AI returned unchanged content:"))
-            (println)
-            (println (str "Title: " title))
-            (println (str "Description: " (if (str/blank? description) "(empty)" description)))
-            (when content-changed?
-              (println "\n(See diff above for changes)")))
-          (println "====================")
-          (System/exit 0))
+        (when-not initial-data
+          (cond
+            editor
+            (do
+              (println "Editor cancelled or no content provided")
+              (System/exit 0))
 
-        ;; Run sprint detection for both dry-run and normal modes
-        (let [sprint-info (when (and (:auto-add-to-sprint jira-config)
-                                     (:base-url jira-config)
-                                     (:default-project jira-config))
-                            (let [debug? (:sprint-debug jira-config false)
-                                  project-key (:default-project jira-config)
-                                  fallback-boards (:fallback-board-ids jira-config)
-                                  sprint-pattern (:sprint-name-pattern jira-config)]
+            file
+            (do
+              (println (str "Error reading file: " file))
+              (System/exit 1))
 
-                              (when debug? (println "--- SPRINT DETECTION DEBUG ---"))
-                              (when debug? (println (str "  Project: " project-key)))
-                              (when debug? (println (str "  Fallback boards: " fallback-boards)))
-                              (when debug? (println (str "  Name pattern: " sprint-pattern)))
+            :else
+            (do
+              (println "Error: story summary required")
+              (println "Usage: crucible quick-story \"Your story summary\"")
+              (println "   or: crucible qs \"Your story summary\"")
+              (println "   or: crucible qs \"Your story summary\" -d \"Description here\"")
+              (println "   or: crucible qs -e  (open editor)")
+              (println "   or: crucible qs -f filename.md  (from file)")
+              (println "   or: crucible qs --ai-only \"test content\"  (AI enhancement only)")
+              (println "   or: crucible qs --list-drafts  (show available drafts)")
+              (println "   or: crucible qs --recover <filename>  (recover from draft)")
+              (System/exit 1))))
 
-                              (let [sprint-data (jira/find-sprints jira-config
-                                                                   {:project-key project-key
-                                                                    :debug debug?
-                                                                    :fallback-board-ids fallback-boards
-                                                                    :sprint-name-pattern sprint-pattern})]
-                                ;; DEBUG: Add detailed logging of what enhanced-sprint-detection actually returned
-                                (when debug?
-                                  (println "--- FIND-SPRINTS RETURN VALUE DEBUG ---")
-                                  (println (str "  Received sprint-data: " sprint-data))
-                                  (println (str "  sprint-data type: " (type sprint-data)))
-                                  (println (str "  sprint-data nil?: " (nil? sprint-data))))
+        ;; Load config for AI settings and sprint detection
+        (let [config (config/load-config)
+              jira-config (:jira config)
+              ai-config (:ai config)
+              ai-enabled (and (not no-ai)
+                              (or ai ai-only (:enabled ai-config false))
+                              (:gateway-url ai-config))
 
-                                ;; DEBUG: Add detailed logging of sprint-data structure
-                                (when debug?
-                                  (println "--- SPRINT DATA STRUCTURE DEBUG ---")
-                                  (println (str "  sprint-data: " sprint-data))
-                                  (when sprint-data
-                                    (println (str "  :sprints key: " (:sprints sprint-data)))
-                                    (println (str "  :sprints count: " (count (:sprints sprint-data))))
-                                    (println (str "  :board-count: " (:board-count sprint-data)))
-                                    (println (str "  :detection-method: " (:detection-method sprint-data)))))
+              ;; Apply AI enhancement if enabled
+              enhanced-data (if ai-enabled
+                              (do
+                                (println "Enhancing content with AI...")
+                                (ai/enhance-content initial-data ai-config))
+                              initial-data)
 
-                                ;; Process sprint data and return result (FIX: ensure this is the return value)
-                                (let [sprint-result
-                                      (when sprint-data
-                                        (let [sprints (:sprints sprint-data)
-                                              board-count (:board-count sprint-data)
-                                              method (:detection-method sprint-data)]
-                                          ;; DEBUG: Add more logging right before the cond
-                                          (when debug?
-                                            (println "--- SPRINT PROCESSING LOGIC DEBUG ---")
-                                            (println (str "  sprints variable: " sprints))
-                                            (println (str "  sprints count: " (count sprints)))
-                                            (println (str "  method variable: " method)))
+              ;; Show AI changes if any
+              _ (when (and ai-enabled (not= initial-data enhanced-data))
+                  (ai/show-diff initial-data enhanced-data))
 
-                                          (cond
-                                            (= 1 (count sprints))
-                                            (do
-                                              (println (str "  Found 1 active sprint across " board-count " boards (" method ")"))
-                                              {:sprint (first sprints) :method method})
+              ;; Final data to use
+              final-data enhanced-data]
 
-                                            (> (count sprints) 1)
-                                            (do
-                                              (println (str "  Found " (count sprints) " active sprints, using: " (:name (first sprints)) " (" method ")"))
-                                              {:sprint (first sprints) :method method})
-
-                                            :else
-                                            (do
-                                              (println (str "  No active sprints found (" method ")"))
-                                              (when debug?
-                                                (println "  Debug suggestions:")
-                                                (println "     - Check if project key is correct")
-                                                (println "     - Verify user has access to project boards")
-                                                (println "     - Check if sprints are in 'active' state (not future/closed)")
-                                                (println "     - Consider setting :fallback-board-ids in config")
-                                                (println "     - Try: c jira-check to test basic connectivity"))
-                                              nil))))]
-
-                                  ;; DEBUG: Log the final sprint result that will be returned
-                                  (when debug?
-                                    (println "--- FINAL SPRINT RESULT DEBUG ---")
-                                    (println (str "  sprint-result: " sprint-result))
-                                    (println (str "  sprint-result nil?: " (nil? sprint-result))))
-
-                                  ;; Show troubleshooting if no sprint data
-                                  (when (and (not sprint-data) debug?)
-                                    (println "--- TROUBLESHOOTING ---")
-                                    (println "  Sprint detection completely failed. Try:")
-                                    (println "  1. c jira-check - verify basic connectivity")
-                                    (println "  2. Set :sprint-debug true in config for detailed logging")
-                                    (println "  3. Manually find board IDs and set :fallback-board-ids [123 456]")
-                                    (println "  4. Set :auto-add-to-sprint false to disable sprint detection"))
-
-                                  ;; Return the sprint result (this is the key fix!)
-                                  sprint-result))))
-              {:keys [title description]} final-data]
-
-          ;; DEBUG: Log what sprint-info actually contains
-          (let [debug? (:sprint-debug jira-config false)]
-            (when debug?
-              (println "--- SPRINT-INFO FINAL ASSIGNMENT DEBUG ---")
-              (println (str "  Final sprint-info: " sprint-info))
-              (println (str "  sprint-info nil?: " (nil? sprint-info)))))
-
-          ;; Handle dry-run mode (now includes sprint detection results)
-          (when dry-run
-            (println "=== DRY RUN ===")
-            (println (str "Title: " title))
-            (println (str "Description:\n" description))
-            (when file
-              (println (str "Source file: " file)))
-            (when sprint-info
-              (let [sprint (:sprint sprint-info)]
-                (println (str "Sprint: Would be added to \"" (:name sprint) "\" (ID: " (:id sprint) ")"))))
-            (when (and (:auto-add-to-sprint jira-config) (not sprint-info))
-              (println "Sprint: No active sprint found (would not be added to sprint)"))
+          ;; Handle AI-only mode - exit without creating Jira ticket
+          (when ai-only
+            (println "\n=== AI-ONLY MODE ===")
+            (let [{:keys [title description]} final-data
+                  content-changed? (not= initial-data enhanced-data)]
+              (if content-changed?
+                (println "AI enhanced the content:")
+                (println "AI returned unchanged content:"))
+              (println)
+              (println (str "Title: " title))
+              (println (str "Description: " (if (str/blank? description) "(empty)" description)))
+              (when content-changed?
+                (println "\n(See diff above for changes)")))
+            (println "====================")
             (System/exit 0))
 
-          ;; Proceed with normal ticket creation
-          ;; Validate configuration
-          (when-not (:base-url jira-config)
-            (println "Error: Jira configuration missing")
-            (println "Please set CRUCIBLE_JIRA_URL or configure in crucible.edn")
-            (System/exit 1))
+          ;; Run sprint detection for both dry-run and normal modes
+          (let [sprint-info (when (and (:auto-add-to-sprint jira-config)
+                                       (:base-url jira-config)
+                                       (:default-project jira-config))
+                              (let [debug? (:sprint-debug jira-config false)
+                                    project-key (:default-project jira-config)
+                                    fallback-boards (:fallback-board-ids jira-config)
+                                    sprint-pattern (:sprint-name-pattern jira-config)]
 
-          (when-not (:default-project jira-config)
-            (println "Error: No default project configured")
-            (println "Please set :jira :default-project in your config file")
-            (System/exit 1))
+                                (when debug? (println "--- SPRINT DETECTION DEBUG ---"))
+                                (when debug? (println (str "  Project: " project-key)))
+                                (when debug? (println (str "  Fallback boards: " fallback-boards)))
+                                (when debug? (println (str "  Name pattern: " sprint-pattern)))
 
-          ;; Get current user info if auto-assign is enabled
-          (let [user-info (when (:auto-assign-self jira-config)
-                            (jira/get-user-info jira-config))
+                                (let [sprint-data (jira/find-sprints jira-config
+                                                                     {:project-key project-key
+                                                                      :debug debug?
+                                                                      :fallback-board-ids fallback-boards
+                                                                      :sprint-name-pattern sprint-pattern})]
+                                  ;; DEBUG: Add detailed logging of what enhanced-sprint-detection actually returned
+                                  (when debug?
+                                    (println "--- FIND-SPRINTS RETURN VALUE DEBUG ---")
+                                    (println (str "  Received sprint-data: " sprint-data))
+                                    (println (str "  sprint-data type: " (type sprint-data)))
+                                    (println (str "  sprint-data nil?: " (nil? sprint-data))))
 
-                ;; Build the issue data
-                issue-data {:fields {:project {:key (:default-project jira-config)}
-                                     :summary title
-                                     :issuetype {:name (:default-issue-type jira-config)}
-                                     :description (jira/text->adf description)}}
+                                  ;; DEBUG: Add detailed logging of sprint-data structure
+                                  (when debug?
+                                    (println "--- SPRINT DATA STRUCTURE DEBUG ---")
+                                    (println (str "  sprint-data: " sprint-data))
+                                    (when sprint-data
+                                      (println (str "  :sprints key: " (:sprints sprint-data)))
+                                      (println (str "  :sprints count: " (count (:sprints sprint-data))))
+                                      (println (str "  :board-count: " (:board-count sprint-data)))
+                                      (println (str "  :detection-method: " (:detection-method sprint-data)))))
 
-                ;; Add assignee if auto-assign is enabled and we have user info
-                issue-data (if (and user-info (:accountId user-info))
-                             (assoc-in issue-data [:fields :assignee]
-                                       {:accountId (:accountId user-info)})
-                             issue-data)
+                                  ;; Process sprint data and return result (FIX: ensure this is the return value)
+                                  (let [sprint-result
+                                        (when sprint-data
+                                          (let [sprints (:sprints sprint-data)
+                                                board-count (:board-count sprint-data)
+                                                method (:detection-method sprint-data)]
+                                            ;; DEBUG: Add more logging right before the cond
+                                            (when debug?
+                                              (println "--- SPRINT PROCESSING LOGIC DEBUG ---")
+                                              (println (str "  sprints variable: " sprints))
+                                              (println (str "  sprints count: " (count sprints)))
+                                              (println (str "  method variable: " method)))
 
-                ;; Add default fix version if configured
-                default-fix-version-id (:default-fix-version-id jira-config)
-                issue-data (if default-fix-version-id
-                             (assoc-in issue-data [:fields :fixVersions]
-                                       [{:id default-fix-version-id}])
-                             issue-data)
+                                            (cond
+                                              (= 1 (count sprints))
+                                              (do
+                                                (println (str "  Found 1 active sprint across " board-count " boards (" method ")"))
+                                                {:sprint (first sprints) :method method})
 
-                ;; Add custom fields from configuration
-                custom-fields (:custom-fields jira-config {})
+                                              (> (count sprints) 1)
+                                              (do
+                                                (println (str "  Found " (count sprints) " active sprints, using: " (:name (first sprints)) " (" method ")"))
+                                                {:sprint (first sprints) :method method})
 
-                ;; Add default story points if configured and not already in custom fields
-                default-story-points (:default-story-points jira-config)
-                custom-fields-with-story-points
-                (if (and default-story-points
-                         (not (some #(str/includes? (str %) "story") (keys custom-fields))))
-                  ;; Story points field is commonly customfield_10002, but this should be configurable
-                  ;; For now, add it to custom-fields if story-points-field is configured
-                  (if-let [story-points-field (:story-points-field jira-config)]
-                    (assoc custom-fields story-points-field default-story-points)
+                                              :else
+                                              (do
+                                                (println (str "  No active sprints found (" method ")"))
+                                                (when debug?
+                                                  (println "  Debug suggestions:")
+                                                  (println "     - Check if project key is correct")
+                                                  (println "     - Verify user has access to project boards")
+                                                  (println "     - Check if sprints are in 'active' state (not future/closed)")
+                                                  (println "     - Consider setting :fallback-board-ids in config")
+                                                  (println "     - Try: c jira-check to test basic connectivity"))
+                                                nil))))]
+
+                                    ;; DEBUG: Log the final sprint result that will be returned
+                                    (when debug?
+                                      (println "--- FINAL SPRINT RESULT DEBUG ---")
+                                      (println (str "  sprint-result: " sprint-result))
+                                      (println (str "  sprint-result nil?: " (nil? sprint-result))))
+
+                                    ;; Show troubleshooting if no sprint data
+                                    (when (and (not sprint-data) debug?)
+                                      (println "--- TROUBLESHOOTING ---")
+                                      (println "  Sprint detection completely failed. Try:")
+                                      (println "  1. c jira-check - verify basic connectivity")
+                                      (println "  2. Set :sprint-debug true in config for detailed logging")
+                                      (println "  3. Manually find board IDs and set :fallback-board-ids [123 456]")
+                                      (println "  4. Set :auto-add-to-sprint false to disable sprint detection"))
+
+                                    ;; Return the sprint result (this is the key fix!)
+                                    sprint-result))))
+                {:keys [title description]} final-data]
+
+            ;; DEBUG: Log what sprint-info actually contains
+            (let [debug? (:sprint-debug jira-config false)]
+              (when debug?
+                (println "--- SPRINT-INFO FINAL ASSIGNMENT DEBUG ---")
+                (println (str "  Final sprint-info: " sprint-info))
+                (println (str "  sprint-info nil?: " (nil? sprint-info)))))
+
+            ;; Handle dry-run mode (now includes sprint detection results)
+            (when dry-run
+              (println "=== DRY RUN ===")
+              (println (str "Title: " title))
+              (println (str "Description:\n" description))
+              (when file
+                (println (str "Source file: " file)))
+              (when sprint-info
+                (let [sprint (:sprint sprint-info)]
+                  (println (str "Sprint: Would be added to \"" (:name sprint) "\" (ID: " (:id sprint) ")"))))
+              (when (and (:auto-add-to-sprint jira-config) (not sprint-info))
+                (println "Sprint: No active sprint found (would not be added to sprint)"))
+              (System/exit 0))
+
+            ;; Proceed with normal ticket creation
+            ;; Validate configuration
+            (when-not (:base-url jira-config)
+              (println "Error: Jira configuration missing")
+              (println "Please set CRUCIBLE_JIRA_URL or configure in crucible.edn")
+              (System/exit 1))
+
+            (when-not (:default-project jira-config)
+              (println "Error: No default project configured")
+              (println "Please set :jira :default-project in your config file")
+              (System/exit 1))
+
+            ;; Get current user info if auto-assign is enabled
+            (let [user-info (when (:auto-assign-self jira-config)
+                              (jira/get-user-info jira-config))
+
+                  ;; Build the issue data
+                  issue-data {:fields {:project {:key (:default-project jira-config)}
+                                       :summary title
+                                       :issuetype {:name (:default-issue-type jira-config)}
+                                       :description (jira/text->adf description)}}
+
+                  ;; Add assignee if auto-assign is enabled and we have user info
+                  issue-data (if (and user-info (:accountId user-info))
+                               (assoc-in issue-data [:fields :assignee]
+                                         {:accountId (:accountId user-info)})
+                               issue-data)
+
+                  ;; Add default fix version if configured
+                  default-fix-version-id (:default-fix-version-id jira-config)
+                  issue-data (if default-fix-version-id
+                               (assoc-in issue-data [:fields :fixVersions]
+                                         [{:id default-fix-version-id}])
+                               issue-data)
+
+                  ;; Add custom fields from configuration
+                  custom-fields (:custom-fields jira-config {})
+
+                  ;; Add default story points if configured and not already in custom fields
+                  default-story-points (:default-story-points jira-config)
+                  custom-fields-with-story-points
+                  (if (and default-story-points
+                           (not (some #(str/includes? (str %) "story") (keys custom-fields))))
+                    ;; Story points field is commonly customfield_10002, but this should be configurable
+                    ;; For now, add it to custom-fields if story-points-field is configured
+                    (if-let [story-points-field (:story-points-field jira-config)]
+                      (assoc custom-fields story-points-field default-story-points)
+                      custom-fields)
                     custom-fields)
-                  custom-fields)
 
-                issue-data (if (seq custom-fields-with-story-points)
-                             (update issue-data :fields merge custom-fields-with-story-points)
-                             issue-data)]
+                  issue-data (if (seq custom-fields-with-story-points)
+                               (update issue-data :fields merge custom-fields-with-story-points)
+                               issue-data)]
 
-            ;; Create the issue
-            (println (cond
-                       file "Creating story from file..."
-                       ai-enabled "Creating AI-enhanced story..."
-                       :else "Creating story..."))
-            (let [result (jira/create-issue jira-config issue-data)]
-              (if (:success result)
-                (let [issue-key (:key result)
-                      sprint-added? (when sprint-info
-                                      (jira/add-issue-to-sprint
-                                       jira-config
-                                       (:id (:sprint sprint-info))
-                                       issue-key))]
-                  (println (str "\nCreated " issue-key ": " title))
-                  (println (str "  URL: " (str/replace (:base-url jira-config) #"/$" "") "/browse/" issue-key))
-                  (when sprint-added?
-                    (println "  Added to current sprint"))
-                  (when user-info
-                    (println (str "  Assigned to: " (:displayName user-info))))
-                  (when file
-                    (println (str "  Source: " file " (" (count (str/split-lines description)) " lines)")))
-                  (when ai-enabled
-                    (println "  Enhanced with AI"))
-                  (println (str "\nStart working: c work-on " issue-key)))
-                (do
-                  (println (str "Error: " (:error result)))
-                  (System/exit 1))))))))))
+              ;; Create the issue
+              (println (cond
+                         file "Creating story from file..."
+                         ai-enabled "Creating AI-enhanced story..."
+                         :else "Creating story..."))
+              (let [result (jira/create-issue jira-config issue-data)
+                    draft-path (:draft-path final-data)]
+                (if (:success result)
+                  (do
+                    ;; Success - clean up draft file and show results
+                    (cleanup-draft draft-path)
+                    (let [issue-key (:key result)
+                          sprint-added? (when sprint-info
+                                          (jira/add-issue-to-sprint
+                                           jira-config
+                                           (:id (:sprint sprint-info))
+                                           issue-key))]
+                      (println (str "\nCreated " issue-key ": " title))
+                      (println (str "  URL: " (str/replace (:base-url jira-config) #"/$" "") "/browse/" issue-key))
+                      (when sprint-added?
+                        (println "  Added to current sprint"))
+                      (when user-info
+                        (println (str "  Assigned to: " (:displayName user-info))))
+                      (when file
+                        (println (str "  Source: " file " (" (count (str/split-lines description)) " lines)")))
+                      (when ai-enabled
+                        (println "  Enhanced with AI"))
+                      (println (str "\nStart working: c work-on " issue-key))))
+                  (do
+                    ;; Failure - preserve draft and show recovery info
+                    (println (str "Error: " (:error result)))
+                    (when draft-path
+                      (println (str "\nDraft saved for recovery: " draft-path))
+                      (println "To retry with same content:")
+                      (println (str "  c qs --recover " (fs/file-name draft-path))))
+                    (System/exit 1)))))))))))
 
 (defn inspect-ticket-command
   "Inspect a Jira ticket to see all its fields including custom fields"
