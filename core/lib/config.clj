@@ -53,6 +53,13 @@
                :tickets-dir "tickets"
                :docs-dir "docs"}
 
+   :daily-workflow {:start-day {:enabled true
+                                :max-look-back-days 7 ; How far back to look for last log
+                                :gather-jira-context true ; Pull recent Jira activity
+                                :carry-forward-tasks true ; Include uncompleted tasks
+                                :show-sprint-status true ; Include current sprint info
+                                :jira-activity-days 5}} ; How many days of Jira history to fetch
+
    :editor nil})
 
 (defn expand-path

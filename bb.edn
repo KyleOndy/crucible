@@ -119,6 +119,10 @@
   {:doc "Create a quick Jira story (alias for: crucible quick-story)"
    :task (apply shell "bb" "crucible" "qs" *command-line-args*)}
 
+  sd
+  {:doc "Start your day with enhanced context (alias for: crucible start-day)"
+   :task (shell "bb crucible start-day")}
+
   jira-check
   {:doc "Check Jira configuration and connectivity (alias for: crucible jira-check)"
    :task (apply shell "bb" "crucible" "jira-check" *command-line-args*)}}}

@@ -421,6 +421,95 @@
 
 ;; High-level functions
 
+(defn get-my-recent-activity
+  "Get current user's recent activity since given date"
+  [jira-config since-date activity-days]
+  (try
+    (let [user-info (get-user-info jira-config)
+          account-id (:accountId user-info)
+
+          ;; Create JQL query for tickets with recent activity by the user
+          ;; Look for tickets that were updated in the last few days and involve the current user
+          jql (str "assignee = currentUser() OR reporter = currentUser() "
+                   "AND updated >= -" activity-days "d "
+                   "ORDER BY updated DESC")
+
+          response (jira-request jira-config :get "/search"
+                                 {:query-params {:jql jql
+                                                 :fields "key,summary,status,updated"
+                                                 :maxResults 20}})
+
+          issues (get-in response [:body :issues] [])]
+
+      ;; Format the activity items
+      (->> issues
+           (take 10) ; Limit to top 10 most recent
+           (map (fn [issue]
+                  (let [key (:key issue)
+                        summary (get-in issue [:fields :summary])
+                        status (get-in issue [:fields :status :name])
+                        updated (get-in issue [:fields :updated])]
+                    (str key ": " summary " [" status "]"))))))
+
+    (catch Exception e
+      (println (str "Error fetching Jira activity: " (.getMessage e)))
+      [])))
+
+(defn get-current-sprint-info
+  "Get current sprint information for the user"
+  [jira-config]
+  (try
+    ;; Use existing sprint detection logic
+    (let [project-key (get jira-config :default-project)
+          fallback-boards (get jira-config :fallback-board-ids)]
+
+      (when project-key
+        (let [sprint-data (find-sprints jira-config
+                                        {:project-key project-key
+                                         :fallback-board-ids fallback-boards})
+              sprints (get sprint-data :sprints [])
+              active-sprint (first sprints)]
+
+          (when active-sprint
+            (let [sprint-name (:name active-sprint)
+                  end-date-str (:endDate active-sprint)
+
+                  ;; Calculate days remaining (simplified - could be more precise)
+                  days-remaining (if end-date-str
+                                   (try
+                                     ;; Parse ISO date and calculate days
+                                     (let [end-date (java.time.LocalDate/parse (subs end-date-str 0 10))
+                                           today (java.time.LocalDate/now)
+                                           days (.until today end-date java.time.temporal.ChronoUnit/DAYS)]
+                                       (max 0 days))
+                                     (catch Exception _ "unknown"))
+                                   "unknown")
+
+                  ;; Get assigned tickets in current sprint (simplified)
+                  assigned-tickets (try
+                                     (let [jql (str "assignee = currentUser() "
+                                                    "AND sprint = \"" sprint-name "\" "
+                                                    "ORDER BY priority DESC")
+                                           response (jira-request jira-config :get "/search"
+                                                                  {:query-params {:jql jql
+                                                                                  :fields "key,summary,status"
+                                                                                  :maxResults 10}})]
+                                       (->> (get-in response [:body :issues] [])
+                                            (map (fn [issue]
+                                                   (str (:key issue) ": "
+                                                        (get-in issue [:fields :summary])
+                                                        " [" (get-in issue [:fields :status :name]) "]")))))
+                                     (catch Exception _
+                                       []))]
+
+              {:name sprint-name
+               :days-remaining days-remaining
+               :assigned-tickets assigned-tickets})))))
+
+    (catch Exception e
+      (println (str "Error fetching sprint info: " (.getMessage e)))
+      nil)))
+
 (defn run-jira-check
   "Test Jira connectivity"
   [& args]
