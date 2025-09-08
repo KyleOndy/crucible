@@ -182,3 +182,66 @@ Rather than immediately creating a binary, Crucible starts as babashka scripts a
 - Provides flexibility during feature development
 - Allows testing of the full user workflow early
 - Supports seamless transition to production distribution
+
+## Future Ideas
+
+### End-of-Day Workflow Enhancement
+
+Building on the successful start-day functionality (`bb sd`), planned end-day features:
+
+**`bb ed` (End Day) Command:**
+- Interactive end-of-day summary editor
+- Task completion review and status updates  
+- Automatic carry-forward of uncompleted tasks to tomorrow
+- Standup notes generation from today's activities
+- Optional cleanup of old drafts and command outputs
+
+### Jira Integration Evolution
+
+**Current State:** Manual copy/paste from daily logs to Jira as needed
+
+**Future Vision:** Intelligent Jira workflow integration
+- Optional work log creation from daily log task sections
+- Smart ticket status updates based on log content
+- Automatic time tracking integration
+- Context-aware ticket commenting from log summaries
+
+**Design Philosophy:** Maintain user control - never automatically push to Jira without explicit confirmation
+
+### Confluence Backup Integration  
+
+**Planned Features:**
+- Automatic daily log archival to personal Confluence space
+- Smart detection of unarchived logs during start-day routine
+- Markdown to Confluence format conversion
+- Searchable historical log repository
+- Privacy controls for sensitive command outputs
+
+**Benefits:**
+- Searchable work history across all devices
+- Team visibility into daily activities when appropriate  
+- Backup protection against local data loss
+- Integration with existing Atlassian ecosystem
+
+### Advanced Context Intelligence
+
+**On-Call Awareness:**
+- Dual context merging: recent activity + last regular work day
+- Intelligent work type detection (regular vs. incident response)
+- Flexible time gap handling for holidays and PTO
+- Enhanced sprint and ticket context from extended breaks
+
+**Smart Integrations:**
+- Calendar integration for meeting context
+- 1:1 document linking and reminders
+- Team standup preparation automation
+- Cross-team visibility for shared work items
+
+### Implementation Approach
+
+All future features will follow the established patterns:
+- **Incremental Enhancement:** Build on existing daily log workflow
+- **Single Editor Path:** Maintain `bb l` as primary editing interface  
+- **User Choice:** All automations require explicit user confirmation
+- **Graceful Degradation:** Features work without external dependencies
+- **Privacy First:** User controls what information gets shared where
