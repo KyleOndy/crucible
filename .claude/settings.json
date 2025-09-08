@@ -2,7 +2,7 @@
   "permissions": {
     "allow": [
       "mcp__clojure-mcp__*",
-      "Bash(bb*)",
+      "Bash(bb:*)",
       "mcp__clojure"
     ]
   }
