@@ -87,6 +87,16 @@ Since both systems use the same zsh/Nix setup, most commands work identically. H
 - **Scripts**: `core/bin/` for executable entry points
 - **Docs**: `docs/` for user-facing documentation
 
+#### Clojure File Size Guidelines
+
+- **50-300 lines**: Ideal range for most files
+- **300-500 lines**: Acceptable for complex modules
+- **500+ lines**: Consider refactoring into smaller, focused modules
+- Single responsibility per namespace
+- Keep related functions together
+- Aim for high cohesion within files
+- Minimize dependencies between files
+
 ### Testing Approach
 
 1. **Local Validation** (Linux):
