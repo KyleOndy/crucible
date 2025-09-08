@@ -5,7 +5,11 @@
 (load-file "core/lib/ai.clj")
 (load-file "core/lib/config.clj")
 (load-file "core/lib/jira.clj")
+(load-file "core/lib/process-detection.clj")
+(load-file "core/lib/ticket-editor.clj")
 (load-file "core/lib/daily-log.clj")
+(load-file "core/lib/commands.clj")
+(load-file "core/lib/cli.clj")
 
 (ns crucible
   (:require
@@ -13,9 +17,13 @@
    [babashka.process :as process]
    [clojure.string :as str]
    [lib.ai :as ai]
+   [lib.cli :as cli]
+   [lib.commands :as commands]
    [lib.config :as config]
    [lib.daily-log :as daily-log]
-   [lib.jira :as jira])
+   [lib.jira :as jira]
+   [lib.process-detection :as process-detection]
+   [lib.ticket-editor :as ticket-editor])
   (:import
    (java.time
     LocalDate
@@ -25,443 +33,10 @@
    (java.util
     Locale)))
 
-(def cli-spec
-  {:help {:desc "Show help"
-          :alias :h}})
-
-(defn help-text
-  []
-  (str "Crucible - SRE productivity system\n\n"
-       "Commands:\n"
-       "  help              Show this help\n"
-       "  doctor            System health check\n"
-       "  inspect-ticket <id> View ticket fields\n"
-       "  jira-check [ticket] Check Jira config\n"
-       "  l                 Open daily log\n"
-       "  sd                Start day (enhanced log)\n"
-       "  pipe [command]    Pipe stdin to log\n"
-       "  qs <summary>      Create Jira story\n\n"
-       "Quick Story Options:\n"
-       "  -e, --editor      Open editor\n"
-       "  -f, --file <file> From file\n"
-       "  --dry-run         Preview only\n"
-       "  --ai              Enable AI\n"
-       "  --no-ai           Disable AI\n"
-       "  --ai-only         AI test only\n"
-       "  --list-drafts     Show drafts\n"
-       "  --recover <file>  Recover draft\n"
-       "  --clean-drafts    Clean old drafts\n"))
-
-(defn launch-editor
-  "Launch editor with the given file path. Returns the editor's exit code."
-  [file-path]
-  (let [editor (System/getenv "EDITOR")]
-    (if editor
-      (let [result @(process/process [editor (str file-path)] {:inherit true})]
-        (:exit result))
-      (do
-        (println "Error: EDITOR environment variable not set")
-        (System/exit 1)))))
-
-(defn ensure-draft-directory
-  "Ensure draft directory exists and return path"
-  []
-  (let [draft-dir (str (fs/cwd) "/temp/ticket-drafts")]
-    (fs/create-dirs draft-dir)
-    draft-dir))
-
-(defn save-draft-copy
-  "Save copy of ticket content to draft directory, return draft path"
-  [content]
-  (let [draft-dir (ensure-draft-directory)
-        now (LocalDateTime/now)
-        formatter (DateTimeFormatter/ofPattern "yyyy-MM-dd-HHmm-ss")
-        draft-filename (str "draft-" (.format now formatter) ".md")
-        draft-path (str draft-dir "/" draft-filename)]
-    (spit draft-path content)
-    draft-path))
-
-(defn cleanup-draft
-  "Remove draft file if it exists"
-  [draft-path]
-  (when (and draft-path (fs/exists? draft-path))
-    (fs/delete draft-path)))
-
-(defn get-available-drafts
-  "List available draft files with metadata"
-  []
-  (let [draft-dir (ensure-draft-directory)]
-    (if (fs/exists? draft-dir)
-      (->> (fs/list-dir draft-dir)
-           (filter #(str/ends-with? (str %) ".md"))
-           (map (fn [path]
-                  (let [filename (fs/file-name path)
-                        size (fs/size path)
-                        modified (fs/last-modified-time path)]
-                    {:path (str path)
-                     :filename filename
-                     :size size
-                     :modified modified})))
-           (sort-by :modified)
-           reverse)
-      [])))
-
-(defn clean-old-drafts
-  "Remove draft files older than specified days (default 7)"
-  [& {:keys [days] :or {days 7}}]
-  (let [draft-dir (ensure-draft-directory)
-        cutoff-time (-> (LocalDateTime/now)
-                        (.minusDays days)
-                        (.toInstant (java.time.ZoneOffset/UTC)))]
-    (when (fs/exists? draft-dir)
-      (doseq [file (fs/list-dir draft-dir)]
-        (when (str/ends-with? (str file) ".md")
-          (let [modified-time (fs/last-modified-time file)]
-            (when (.isBefore (.toInstant modified-time) cutoff-time)
-              (fs/delete file))))))))
-
-(defn load-draft-content
-  "Load content from draft file"
-  [draft-path]
-  (when (fs/exists? draft-path)
-    (slurp draft-path)))
-
-(defn create-ticket-template
-  "Create template for editor"
-  ([]
-   (create-ticket-template nil nil))
-  ([title]
-   (create-ticket-template title nil))
-  ([title description]
-   (str (if title (str title "\n") "")
-        "\n"
-        "# Enter ticket title on first line" (when title " (or edit above)")
-        "\n"
-        (if description
-          (str description "\n\n")
-          "")
-        "# Enter description " (if description "above (or edit above)" "below") " (markdown supported)\n"
-        "# Lines starting with # are comments (ignored)\n"
-        "# Save and exit to create ticket, exit without saving to cancel\n")))
-
-(defn parse-editor-content
-  "Parse content from editor into title and description"
-  [content]
-  (let [lines (str/split-lines content)
-        non-comment-lines (filter #(not (str/starts-with? % "#")) lines)
-        non-empty-lines (filter #(not (str/blank? %)) non-comment-lines)]
-    (when (seq non-empty-lines)
-      {:title (first non-empty-lines)
-       :description (str/join "\n" (rest non-empty-lines))})))
-
-(defn parse-draft-content
-  "Parse content from draft file into title and description"
-  [content]
-  (when content
-    (parse-editor-content content)))
-
-(defn open-ticket-editor
-  "Open editor for ticket creation, return parsed content with draft path.
-   Returns nil if editor exits with non-zero code."
-  ([]
-   (open-ticket-editor nil nil))
-  ([title]
-   (open-ticket-editor title nil))
-  ([title description]
-   (let [temp-file (fs/create-temp-file {:prefix "crucible-ticket-"
-                                         :suffix ".md"})
-         template (create-ticket-template title description)]
-     (try
-       (spit (str temp-file) template)
-       (let [exit-code (launch-editor temp-file)]
-         (if (= 0 exit-code)
-           (let [content (slurp (str temp-file))
-                 parsed (parse-editor-content content)]
-             (fs/delete temp-file)
-             (if parsed
-               ;; Save draft copy for recovery and add draft path to result
-               (let [draft-path (save-draft-copy content)]
-                 (assoc parsed :draft-path draft-path))
-               ;; No valid content, don't save draft
-               nil))
-           ;; Non-zero exit code, user cancelled
-           (do
-             (fs/delete temp-file)
-             nil)))
-       (catch Exception e
-         (when (fs/exists? temp-file)
-           (fs/delete temp-file))
-         (throw e))))))
-
-(defn review-enhanced-ticket
-  "Open editor to review AI-enhanced ticket content.
-   Returns the parsed content if user approves (exit 0), nil if cancelled."
-  [{:keys [title description]}]
-  (let [temp-file (fs/create-temp-file {:prefix "crucible-review-"
-                                        :suffix ".md"})
-        content (str "# AI-Enhanced Ticket Review\n\n"
-                     "# The ticket below has been enhanced by AI.\n"
-                     "# Review and make any final edits.\n"
-                     "# Save and exit (exit code 0) to create the ticket.\n"
-                     "# Exit without saving (exit code non-0) to cancel.\n\n"
-                     "---\n\n"
-                     title "\n\n"
-                     (if (str/blank? description)
-                       "<!-- No description -->"
-                       description))]
-    (try
-      (spit (str temp-file) content)
-      (let [exit-code (launch-editor temp-file)]
-        (if (= 0 exit-code)
-          (let [edited-content (slurp (str temp-file))
-                parsed (parse-editor-content edited-content)]
-            (fs/delete temp-file)
-            parsed)
-          ;; Non-zero exit code, user cancelled
-          (do
-            (fs/delete temp-file)
-            nil)))
-      (catch Exception e
-        (when (fs/exists? temp-file)
-          (fs/delete temp-file))
-        (throw e)))))
-
-(defn parse-flags
-  "Simple flag parsing for commands. Returns {:args [...] :flags {...}}"
-  [args]
-  (let [flags (atom {})
-        remaining-args (atom [])
-        arg-iter (atom args)]
-    (while (seq @arg-iter)
-      (let [arg (first @arg-iter)
-            rest-args (rest @arg-iter)]
-        (cond
-          (or (= arg "-e") (= arg "--editor"))
-          (do
-            (swap! flags assoc :editor true)
-            (reset! arg-iter rest-args))
-
-          (= arg "--dry-run")
-          (do
-            (swap! flags assoc :dry-run true)
-            (reset! arg-iter rest-args))
-
-          (= arg "--ai")
-          (do
-            (swap! flags assoc :ai true)
-            (reset! arg-iter rest-args))
-
-          (= arg "--no-ai")
-          (do
-            (swap! flags assoc :no-ai true)
-            (reset! arg-iter rest-args))
-
-          (= arg "--ai-only")
-          (do
-            (swap! flags assoc :ai-only true)
-            (reset! arg-iter rest-args))
-
-          (or (= arg "-f") (= arg "--file"))
-          (if (seq rest-args)
-            (do
-              (swap! flags assoc :file (first rest-args))
-              (reset! arg-iter (rest rest-args)))
-            (System/exit 1))
-
-          (or (= arg "-d") (= arg "--desc"))
-          (if (seq rest-args)
-            (do
-              (swap! flags assoc :desc (first rest-args))
-              (reset! arg-iter (rest rest-args)))
-            (System/exit 1))
-
-          (= arg "--list-drafts")
-          (do
-            (swap! flags assoc :list-drafts true)
-            (reset! arg-iter rest-args))
-
-          (= arg "--clean-drafts")
-          (do
-            (swap! flags assoc :clean-drafts true)
-            (reset! arg-iter rest-args))
-
-          (= arg "--recover")
-          (if (seq rest-args)
-            (do
-              (swap! flags assoc :recover (first rest-args))
-              (reset! arg-iter (rest rest-args)))
-            (System/exit 1))
-
-          (str/starts-with? arg "-")
-          (do
-
-            (reset! arg-iter rest-args))
-
-          :else
-          (do
-            (swap! remaining-args conj arg)
-            (reset! arg-iter rest-args)))))
-    {:args @remaining-args :flags @flags}))
-
-(defn log-command
-  [subcommand]
-  (case subcommand
-    "daily" (daily-log/open-daily-log)
-    (println (str "Unknown log subcommand: " subcommand))))
-
-(defn get-parent-command-java
-  "Use Java ProcessHandle API to detect parent command (cross-platform)"
-  []
-  (try
-    (let [current-handle (java.lang.ProcessHandle/current)
-          parent-handle (.parent current-handle)]
-      (when (.isPresent parent-handle)
-        (let [parent (.get parent-handle)
-              info (.info parent)
-              command-line (.commandLine info)]
-          (when (.isPresent command-line)
-            (let [full-cmd (.get command-line)]
-              ;; Extract just the command that's piping, not the full shell invocation
-              (if (str/includes? full-cmd " | ")
-                ;; If it's a pipeline, extract the part before the pipe
-                (let [pipe-parts (str/split full-cmd #" \| ")
-                      sending-command (str/trim (first pipe-parts))]
-                  ;; Remove "bash -c" wrapper if present
-                  ;; Remove shell wrapper if present and clean up
-                  (let [cleaned-command (cond
-                                          ;; Handle "bash -c command" format
-                                          (str/starts-with? sending-command "bash -c ")
-                                          (str/trim (str/replace sending-command "bash -c " ""))
-                                          ;; Handle full path bash commands
-                                          (re-find #"/bin/bash -c (.+)" sending-command)
-                                          (str/trim (second (re-find #"/bin/bash -c (.+)" sending-command)))
-                                          ;; Return as-is if no wrapper detected
-                                          :else sending-command)]
-                    cleaned-command))
-                nil))))))
-    (catch Exception _
-      nil)))
-
-(defn get-parent-command-ps
-  "Try to detect the command that's piping data to us using ps (fallback method)"
-  []
-  (try
-    (let [current-pid (.pid (java.lang.ProcessHandle/current))
-          ppid (-> (process/shell {:out :string} (str "ps -o ppid= -p " current-pid))
-                   :out
-                   str/trim)
-          parent-cmd (when (not (str/blank? ppid))
-                       (-> (process/shell {:out :string} (str "ps -o args= -p " ppid))
-                           :out
-                           str/trim))]
-      (when parent-cmd
-        ;; Extract just the command that's piping, not the full shell invocation
-        (if (str/includes? parent-cmd " | ")
-          ;; If it's a pipeline, extract the part before the pipe
-          (let [pipe-parts (str/split parent-cmd #" \| ")
-                sending-command (str/trim (first pipe-parts))]
-            ;; Remove "bash -c" wrapper if present
-            ;; Remove shell wrapper if present and clean up
-            (let [cleaned-command (cond
-                                    ;; Handle "bash -c command" format
-                                    (str/starts-with? sending-command "bash -c ")
-                                    (str/trim (str/replace sending-command "bash -c " ""))
-                                    ;; Handle full path bash commands
-                                    (re-find #"/bin/bash -c (.+)" sending-command)
-                                    (str/trim (second (re-find #"/bin/bash -c (.+)" sending-command)))
-                                    ;; Return as-is if no wrapper detected
-                                    :else sending-command)]
-              cleaned-command))
-          nil)))
-    (catch Exception _
-      nil)))
-
-(defn get-parent-command
-  "Unified parent command detection with fallback strategy"
-  []
-  (let [java-result (get-parent-command-java)
-        ps-result (when-not java-result (get-parent-command-ps))]
-    {:command (or java-result ps-result)
-     :method (cond
-               java-result :processhandle
-               ps-result :ps
-               :else :none)}))
-
-(defn pipe-command
-  [& args]
-  (let [stdin-content (slurp *in*)
-        explicit-command (first args)
-        detection-result (when (and (not explicit-command)
-                                    (not (str/blank? stdin-content)))
-                           (get-parent-command))
-        detected-command (:command detection-result)
-        detection-method (:method detection-result)
-        command-str (or explicit-command detected-command)]
-    (if (str/blank? stdin-content)
-      (println "No input received from stdin")
-      (let [log-path (daily-log/get-daily-log-path)
-            timestamp (LocalDateTime/now)
-            time-formatter (DateTimeFormatter/ofPattern "HH:mm:ss")
-            formatted-time (.format timestamp time-formatter)
-            working-dir (System/getProperty "user.dir")
-            method-text (case detection-method
-                          :processhandle "(auto-detected via ProcessHandle)\n"
-                          :ps "(auto-detected via ps)\n"
-                          :none ""
-                          nil "")
-            header-text (if command-str
-                          (str "### Command output at " formatted-time "\n"
-                               "Working directory: " working-dir "\n"
-                               "Command: `" command-str "`\n"
-                               (when detected-command method-text))
-                          (str "### Command output at " formatted-time "\n"
-                               "Working directory: " working-dir "\n"))
-            content-to-append (str "\n" header-text "\n"
-                                   "```bash\n"
-                                   stdin-content
-                                   (when-not (str/ends-with? stdin-content "\n") "\n")
-                                   "```\n")]
-        ;; Write to stdout (tee-like behavior)
-        (print stdin-content)
-        (flush)
-        (daily-log/create-daily-log-from-template log-path)
-        ;; Read the current log content
-        (let [current-content (slurp (str log-path))
-              ;; Find the Commands & Outputs section and the next section
-              sections-pattern #"(?m)^## Commands & Outputs.*\n(?:<!-- .*? -->\n)?((?:(?!^##).*\n)*)"
-              next-section-pattern #"(?m)^## (?!Commands & Outputs)"
-              matcher (re-matcher sections-pattern current-content)]
-          (if (.find matcher)
-            (let [section-end (.end matcher)
-                  ;; Find where the next section starts (if any)
-                  remaining-content (subs current-content section-end)
-                  next-matcher (re-matcher next-section-pattern remaining-content)
-                  insert-position (if (.find next-matcher)
-                                    (+ section-end (.start next-matcher))
-                                    (.length current-content))
-                  before-insert (subs current-content 0 insert-position)
-                  after-insert (subs current-content insert-position)
-                  new-content (str before-insert content-to-append after-insert)]
-              (spit (str log-path) new-content))
-            ;; Fallback to appending at the end if section not found
-            (spit (str log-path) content-to-append :append true)))
-        ;; Enhanced logging with detection method
-        (cond
-          detected-command
-          (let [method-name (case detection-method
-                              :processhandle "ProcessHandle"
-                              :ps "ps"
-                              :none "unknown"
-                              nil "unknown"
-                              "unknown")]
-            (println (str "✓ Output piped to " log-path " (detected via " method-name ": " detected-command ")")))
-          :else
-          (println (str "✓ Output piped to " log-path)))))))
-
 (defn quick-story-command
   "Create a quick Jira story with minimal input, via editor, or from file"
   [args]
-  (let [{:keys [args flags]} (parse-flags args)
+  (let [{:keys [args flags]} (cli/parse-flags args)
         summary (first args)
         {:keys [editor dry-run file ai no-ai ai-only desc list-drafts clean-drafts recover]} flags]
 
@@ -469,7 +44,7 @@
     (cond
       ;; List available drafts
       list-drafts
-      (let [drafts (get-available-drafts)]
+      (let [drafts (ticket-editor/get-available-drafts)]
         (if (seq drafts)
           (do
             (doseq [draft drafts] (println (:filename draft))))
@@ -477,17 +52,17 @@
 
       ;; Clean old drafts
       clean-drafts
-      (clean-old-drafts)
+      (ticket-editor/clean-old-drafts)
 
       ;; Recover from draft - create ticket using draft content
       recover
-      (let [draft-dir (ensure-draft-directory)
+      (let [draft-dir (ticket-editor/ensure-draft-directory)
             draft-path (if (str/starts-with? recover "/")
                          recover
                          (str draft-dir "/" recover))
-            content (load-draft-content draft-path)]
+            content (ticket-editor/load-draft-content draft-path)]
         (if content
-          (let [parsed (parse-draft-content content)]
+          (let [parsed (ticket-editor/parse-draft-content content)]
             (if parsed
               (do
                 (println (str "Recovering draft from: " (fs/file-name draft-path)))
@@ -515,7 +90,7 @@
 
                            ;; Editor input
                            editor
-                           (open-ticket-editor summary desc)
+                           (ticket-editor/open-ticket-editor summary desc)
 
                            ;; Command line input
                            summary
@@ -570,7 +145,7 @@
 
               ;; For editor mode with AI, open review editor
               final-data (if (and editor ai-enabled (not= initial-data enhanced-data))
-                           (let [reviewed (review-enhanced-ticket enhanced-data)]
+                           (let [reviewed (ticket-editor/review-enhanced-ticket enhanced-data)]
                              (if reviewed
                                reviewed
                                (do
@@ -764,7 +339,7 @@
                 (if (:success result)
                   (do
                     ;; Success - clean up draft file and show results
-                    (cleanup-draft draft-path)
+                    (ticket-editor/cleanup-draft draft-path)
                     (let [issue-key (:key result)
                           sprint-added? (when sprint-info
                                           (jira/add-issue-to-sprint
@@ -777,241 +352,12 @@
                     (println (str "Error: " (:error result)))
                     (System/exit 1)))))))))))
 
-(defn inspect-ticket-command
-  "Inspect a Jira ticket to see all its fields including custom fields"
-  [args]
-  (let [ticket-id (first args)]
-    (when-not ticket-id
-      (println "Error: ticket ID required")
-      (println "Usage: crucible inspect-ticket TICKET-123")
-      (System/exit 1))
-
-    (let [config (config/load-config)
-          jira-config (:jira config)]
-
-      ;; Validate configuration
-      (when-not (:base-url jira-config)
-        (println "Error: Jira configuration missing")
-        (println "Please set CRUCIBLE_JIRA_URL or configure in crucible.edn")
-        (System/exit 1))
-
-      (println (str "Fetching ticket: " ticket-id "..."))
-      (let [result (jira/get-ticket-full jira-config ticket-id)]
-        (if-not (:success result)
-          (do
-            (println (str "Error: " (:error result)))
-            (System/exit 1))
-          (let [data (:data result)
-                fields (:fields data)
-                ;; Separate standard and custom fields
-                standard-fields #{:summary :description :issuetype :status :priority
-                                  :assignee :reporter :created :updated :project
-                                  :components :labels :fixVersions :versions}
-                custom-fields (filter #(str/starts-with? (name %) "customfield") (keys fields))]
-
-            (println (str "\n=== Ticket: " (:key data) " ==="))
-            (println "\nStandard Fields:")
-            (doseq [field-key standard-fields]
-              (when-let [value (get fields field-key)]
-                (let [display-value (cond
-                                      (map? value) (or (:displayName value)
-                                                       (:name value)
-                                                       (:value value)
-                                                       (str value))
-                                      (sequential? value) (str/join ", " (map #(or (:name %) (str %)) value))
-                                      :else (str value))]
-                  (when (and display-value (not= display-value ""))
-                    (println (str "  " (name field-key) ": " display-value))))))
-
-            (when (seq custom-fields)
-              (println "\nCustom Fields:")
-              (doseq [field-key (sort custom-fields)]
-                (let [value (get fields field-key)
-                      field-name (name field-key)]
-                  (when value
-                    (let [display-value (cond
-                                          (map? value) (or (:value value)
-                                                           (:displayName value)
-                                                           (str value))
-                                          (sequential? value) (str/join ", " (map #(or (:value %) (str %)) value))
-                                          :else (str value))]
-                      (println (str "  " field-name ": " display-value)))))))
-
-            (println "\n=== Configuration Helper ===")
-            (println "To use these custom fields in your config, add to crucible.edn:")
-            (println "```clojure")
-            (println ":jira {:custom-fields {")
-            (when (seq custom-fields)
-              (doseq [field-key (take 3 (sort custom-fields))]
-                (let [value (get fields field-key)
-                      sample-value (cond
-                                     (map? value) (or (:value value) "\"Value Here\"")
-                                     (number? value) value
-                                     :else "\"Value Here\"")]
-                  (println (str "  :" (name field-key) " " sample-value)))))
-            (println "}}")
-            (println "```")))))))
-
-(defn doctor-command
-  "Comprehensive health check for system, configuration, and dependencies"
-  []
-  (let [config (config/load-config)
-        jira-config (:jira config)
-        ai-config (:ai config)
-        workspace-config (:workspace config)
-        config-status (config/get-config-file-status)
-        env-status (config/get-env-var-status)
-        workspace-check (config/check-workspace-directories workspace-config)]
-
-    ;; Helper function to format status lines
-    (letfn [(status-line [level category message]
-              (let [padded-level (format "%-8s" level)]
-                (if (config/terminal-supports-color?)
-                  (case level
-                    "OK" (println (config/green padded-level) (str category ": " message))
-                    "WARNING" (println (config/yellow padded-level) (str category ": " message))
-                    "ERROR" (println (config/red padded-level) (str category ": " message))
-                    "INFO" (println (config/blue padded-level) (str category ": " message)))
-                  (println padded-level category ":" message))))]
-
-      ;; System Environment
-      (let [java-version (System/getProperty "java.version")
-            os-name (System/getProperty "os.name")
-            os-version (System/getProperty "os.version")
-            working-dir (System/getProperty "user.dir")
-            bb-version (try
-                         (let [result (process/shell {:out :string :err :string} "bb" "--version")]
-                           (if (= 0 (:exit result))
-                             (first (str/split (str/trim (:out result)) #"\n"))
-                             "unknown"))
-                         (catch Exception _ "unknown"))]
-        (status-line "OK" "System" (str "Operating System " os-name " " os-version))
-        (status-line "OK" "System" (str "Java Version " java-version))
-        (status-line "OK" "System" (str "Babashka Version " bb-version))
-        (status-line "OK" "System" (str "Working Directory " working-dir)))
-
-      ;; Configuration Status
-      (let [project-config (:project-config config-status)
-            xdg-config (:xdg-config config-status)]
-        (if (:exists project-config)
-          (if (:readable project-config)
-            (status-line "OK" "Config" (str "Project config " (:path project-config) " (loaded)"))
-            (status-line "ERROR" "Config" (str "Project config " (:path project-config) " (not readable)")))
-          (status-line "INFO" "Config" (str "Project config " (:path project-config) " (not found)")))
-
-        (if (:exists xdg-config)
-          (if (:readable xdg-config)
-            (status-line "OK" "Config" (str "User config " (:path xdg-config) " (loaded)"))
-            (status-line "ERROR" "Config" (str "User config " (:path xdg-config) " (not readable)")))
-          (status-line "INFO" "Config" (str "User config " (:path xdg-config) " (not found)"))))
-
-      ;; Environment Variables
-      (let [env-vars ["CRUCIBLE_JIRA_URL" "CRUCIBLE_JIRA_USER" "CRUCIBLE_JIRA_TOKEN" "CRUCIBLE_WORKSPACE_DIR" "EDITOR"]
-            set-vars (count (filter #(:set (get env-status %)) env-vars))
-            total-vars (count env-vars)]
-        (if (= set-vars total-vars)
-          (status-line "OK" "Config" (str "Environment variables " set-vars "/" total-vars " set"))
-          (status-line "WARNING" "Config" (str "Environment variables " set-vars "/" total-vars " set"))))
-
-      ;; Password Manager
-      (let [pass-available (try
-                             (let [result (process/shell {:out :string :err :string} "which" "pass")]
-                               (= 0 (:exit result)))
-                             (catch Exception _ false))]
-        (if pass-available
-          (status-line "OK" "Config" "Password manager pass available")
-          (status-line "WARNING" "Config" "Password manager pass not found")))
-
-      ;; Workspace Directories  
-      (status-line "OK" "Workspace" (str "Root " (:root-dir workspace-config)))
-      (status-line "OK" "Workspace" (str "Logs " (:logs-dir workspace-config)))
-      (status-line "OK" "Workspace" (str "Tickets " (:tickets-dir workspace-config)))
-      (status-line "OK" "Workspace" (str "Docs " (:docs-dir workspace-config)))
-
-      ;; Missing workspace directories
-      (when (> (:missing-dirs workspace-check) 0)
-        (doseq [missing (:missing-list workspace-check)]
-          (status-line "WARNING" "Workspace" (str (:description missing) " " (:path missing) " (missing)"))))
-
-      ;; Jira Connection
-      (if (and (:base-url jira-config) (:username jira-config) (:api-token jira-config))
-        (let [conn-result (jira/test-connection jira-config)]
-          (if (:success conn-result)
-            (do
-              (status-line "OK" "Jira" (:message conn-result))
-              (when-let [project (:default-project jira-config)]
-                (status-line "OK" "Jira" (str "Default project " project " configured"))))
-            (status-line "ERROR" "Jira" (:message conn-result))))
-        (status-line "ERROR" "Jira" "Missing configuration (base-url, username, or api-token)"))
-
-      ;; AI Configuration
-      (if (:enabled ai-config)
-        (if (and (:gateway-url ai-config) (:api-key ai-config))
-          (status-line "OK" "AI" "Enabled and configured")
-          (status-line "WARNING" "AI" "Enabled but missing gateway-url or api-key"))
-        (status-line "INFO" "AI" "Disabled in configuration"))
-
-      ;; Editor
-      (let [editor (or (:editor config) (System/getenv "EDITOR"))]
-        (if editor
-          (let [editor-path (try
-                              (let [result (process/shell {:out :string :err :string} "which" editor)]
-                                (if (= 0 (:exit result))
-                                  (str/trim (:out result))
-                                  "not found"))
-                              (catch Exception _ "not found"))]
-            (if (not= editor-path "not found")
-              (status-line "OK" "Editor" (str editor " (" editor-path ")"))
-              (status-line "ERROR" "Editor" (str editor " (not found in PATH)"))))
-          (status-line "WARNING" "Editor" "No editor configured (set EDITOR or :editor in config)"))))))
-
-(defn inspect-ticket-command
-  "Show key ticket fields"
-  [args]
-  (let [ticket-id (first args)]
-    (if-not ticket-id
-      (println "Error: ticket ID required")
-      (let [config (config/load-config)
-            jira-config (:jira config)
-            result (jira/get-ticket-full jira-config ticket-id)]
-        (if-not (:success result)
-          (println (str "Error: " (:error result)))
-          (let [data (:data result)
-                fields (:fields data)]
-            (println (str "Ticket: " (:key data)))
-            (println (str "Summary: " (:summary fields)))
-            (println (str "Status: " (get-in fields [:status :name])))
-            (println (str "Assignee: " (get-in fields [:assignee :displayName])))
-            (println (str "Project: " (get-in fields [:project :key])))))))))
-
-(defn dispatch-command
-  [command args]
-  (case command
-    "help" (println (help-text))
-    ("log" "l") (if (or (= command "l") (nil? (first args)))
-                  (daily-log/open-daily-log)
-                  (log-command (first args)))
-    "pipe" (apply pipe-command args)
-    ("start-day" "sd") (daily-log/start-day-command)
-    ("quick-story" "qs") (quick-story-command args)
-    "jira-check" (apply jira/run-jira-check args)
-    "inspect-ticket" (inspect-ticket-command args)
-    "doctor" (doctor-command)
-    (do
-      (println (str "Unknown command: " command))
-      (println)
-      (println (help-text))
-      (System/exit 1))))
-
-(defn -main
-  [& args]
-  (let [command (first args)
-        remaining-args (rest args)]
-    (cond
-      (or (= command "help") (= command "-h") (= command "--help")) (println (help-text))
-      (or (empty? args) (nil? command)) (println (help-text))
-      :else (dispatch-command command remaining-args))))
+;; Command registry for CLI dispatch
+(def command-registry
+  {:pipe commands/pipe-command
+   :quick-story quick-story-command
+   :inspect-ticket commands/inspect-ticket-command
+   :doctor commands/doctor-command})
 
 ;; For bb execution
-;; For bb execution
-(apply -main *command-line-args*)
+(apply cli/-main command-registry *command-line-args*)
