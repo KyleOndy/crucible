@@ -125,4 +125,8 @@
 
   jira-check
   {:doc "Check Jira configuration and connectivity (alias for: crucible jira-check)"
-   :task (apply shell "bb" "crucible" "jira-check" *command-line-args*)}}}
+   :task (apply shell "bb" "crucible" "jira-check" *command-line-args*)}
+
+  doctor
+  {:doc "Comprehensive system health check (alias for: crucible doctor)"
+   :task (shell "bb crucible doctor")}}}
