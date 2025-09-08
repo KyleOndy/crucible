@@ -97,12 +97,15 @@
         (spit (str log-path) (str "# " (:full-date date-info) " - Daily Log\n\n"))))))
 
 (defn launch-editor
-  "Launch editor with the given file path"
+  "Launch editor with the given file path. Returns the editor's exit code."
   [file-path]
   (let [editor (System/getenv "EDITOR")]
     (if editor
-      @(process/process [editor (str file-path)] {:inherit true})
-      (System/exit 1))))
+      (let [result @(process/process [editor (str file-path)] {:inherit true})]
+        (:exit result))
+      (do
+        (println "Error: EDITOR environment variable not set")
+        (System/exit 1)))))
 
 (defn ensure-draft-directory
   "Ensure draft directory exists and return path"
@@ -202,7 +205,8 @@
     (parse-editor-content content)))
 
 (defn open-ticket-editor
-  "Open editor for ticket creation, return parsed content with draft path"
+  "Open editor for ticket creation, return parsed content with draft path.
+   Returns nil if editor exits with non-zero code."
   ([]
    (open-ticket-editor nil nil))
   ([title]
@@ -213,20 +217,58 @@
          template (create-ticket-template title description)]
      (try
        (spit (str temp-file) template)
-       (launch-editor temp-file)
-       (let [content (slurp (str temp-file))
-             parsed (parse-editor-content content)]
-         (fs/delete temp-file)
-         (if parsed
-           ;; Save draft copy for recovery and add draft path to result
-           (let [draft-path (save-draft-copy content)]
-             (assoc parsed :draft-path draft-path))
-           ;; No valid content, don't save draft
-           nil))
+       (let [exit-code (launch-editor temp-file)]
+         (if (= 0 exit-code)
+           (let [content (slurp (str temp-file))
+                 parsed (parse-editor-content content)]
+             (fs/delete temp-file)
+             (if parsed
+               ;; Save draft copy for recovery and add draft path to result
+               (let [draft-path (save-draft-copy content)]
+                 (assoc parsed :draft-path draft-path))
+               ;; No valid content, don't save draft
+               nil))
+           ;; Non-zero exit code, user cancelled
+           (do
+             (fs/delete temp-file)
+             nil)))
        (catch Exception e
          (when (fs/exists? temp-file)
            (fs/delete temp-file))
          (throw e))))))
+
+(defn review-enhanced-ticket
+  "Open editor to review AI-enhanced ticket content.
+   Returns the parsed content if user approves (exit 0), nil if cancelled."
+  [{:keys [title description]}]
+  (let [temp-file (fs/create-temp-file {:prefix "crucible-review-"
+                                        :suffix ".md"})
+        content (str "# AI-Enhanced Ticket Review\n\n"
+                     "# The ticket below has been enhanced by AI.\n"
+                     "# Review and make any final edits.\n"
+                     "# Save and exit (exit code 0) to create the ticket.\n"
+                     "# Exit without saving (exit code non-0) to cancel.\n\n"
+                     "---\n\n"
+                     title "\n\n"
+                     (if (str/blank? description)
+                       "<!-- No description -->"
+                       description))]
+    (try
+      (spit (str temp-file) content)
+      (let [exit-code (launch-editor temp-file)]
+        (if (= 0 exit-code)
+          (let [edited-content (slurp (str temp-file))
+                parsed (parse-editor-content edited-content)]
+            (fs/delete temp-file)
+            parsed)
+          ;; Non-zero exit code, user cancelled
+          (do
+            (fs/delete temp-file)
+            nil)))
+      (catch Exception e
+        (when (fs/exists? temp-file)
+          (fs/delete temp-file))
+        (throw e)))))
 
 (defn parse-flags
   "Simple flag parsing for commands. Returns {:args [...] :flags {...}}"
@@ -577,8 +619,15 @@
               _ (when (and ai-enabled (not= initial-data enhanced-data))
                   (ai/show-diff initial-data enhanced-data))
 
-              ;; Final data to use
-              final-data enhanced-data]
+              ;; For editor mode with AI, open review editor
+              final-data (if (and editor ai-enabled (not= initial-data enhanced-data))
+                           (let [reviewed (review-enhanced-ticket enhanced-data)]
+                             (if reviewed
+                               reviewed
+                               (do
+                                 (println "Review cancelled - ticket creation aborted")
+                                 (System/exit 0))))
+                           enhanced-data)]
 
           ;; Handle AI-only mode - exit without creating Jira ticket
           (when ai-only
