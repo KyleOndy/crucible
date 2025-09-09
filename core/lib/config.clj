@@ -61,7 +61,10 @@
                                 :gather-jira-context true ; Pull recent Jira activity
                                 :carry-forward-tasks true ; Include uncompleted tasks
                                 :show-sprint-status true ; Include current sprint info
-                                :jira-activity-days 5}} ; How many days of Jira history to fetch
+                                :jira-activity-days 5 ; How many days of Jira history to fetch
+                                :jira-exclude-own-activity true ; Hide your own changes
+                                :jira-activity-types ["status" "assignee" "priority" "resolution"] ; Activity types to show
+                                :jira-max-activities 10}} ; Maximum number of activities to display ; How many days of Jira history to fetch
 
    :editor nil})
 

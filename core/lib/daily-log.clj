@@ -138,9 +138,12 @@
         jira-activity (when (and last-log (:gather-jira-context start-day-config true))
                         (try
                           (let [jira-config (:jira config)
-                                activity-days (get start-day-config :jira-activity-days 5)]
+                                activity-options {:activity-days (get start-day-config :jira-activity-days 5)
+                                                  :exclude-own-activity (get start-day-config :jira-exclude-own-activity true)
+                                                  :activity-types (get start-day-config :jira-activity-types ["status" "assignee" "priority" "resolution"])
+                                                  :max-activities (get start-day-config :jira-max-activities 10)}]
                             (when (and (:base-url jira-config) (:username jira-config))
-                              (jira/get-my-recent-activity jira-config (:date last-log) activity-days)))
+                              (jira/get-my-recent-activity jira-config (:date last-log) activity-options)))
                           (catch Exception e
                             (println (str "Warning: Could not fetch Jira activity: " (.getMessage e)))
                             nil)))
