@@ -256,6 +256,29 @@
             (status-line "ERROR" "Jira" (:message conn-result))))
         (status-line "ERROR" "Jira" "Missing configuration (base-url, username, or api-token)"))
 
+      ;; Sprint Information (NEW)
+      (when (and (:base-url jira-config) (:username jira-config) (:api-token jira-config))
+        (try
+          (let [sprint-info (jira/get-current-sprint-info jira-config)]
+            (if sprint-info
+              (do
+                (status-line "OK" "Sprint" (str "Active sprint: " (:name sprint-info) " (ID: " (:id sprint-info) ")"))
+                (status-line "INFO" "Sprint" (str "Days remaining: " (:days-remaining sprint-info)))
+                (status-line "INFO" "Sprint" (str "Assigned tickets: " (count (:assigned-tickets sprint-info))))
+                (when (:sprint-debug jira-config)
+                  (status-line "INFO" "Sprint" (str "JQL Query: " (:jql sprint-info))))
+
+                ;; Show ticket status filter configuration
+                (let [exclude-statuses (:sprint-exclude-statuses jira-config)
+                      show-done (:sprint-show-done-tickets jira-config)]
+                  (if show-done
+                    (status-line "INFO" "Sprint" "Showing all tickets including Done")
+                    (when exclude-statuses
+                      (status-line "INFO" "Sprint" (str "Excluding statuses: " (str/join ", " exclude-statuses)))))))
+              (status-line "WARNING" "Sprint" "No active sprint found")))
+          (catch Exception e
+            (status-line "WARNING" "Sprint" (str "Could not fetch sprint info: " (.getMessage e))))))
+
       ;; AI Configuration
       (if (:enabled ai-config)
         (if (and (:gateway-url ai-config) (:api-key ai-config))

@@ -461,7 +461,10 @@
   (try
     ;; Use existing sprint detection logic
     (let [project-key (get jira-config :default-project)
-          fallback-boards (get jira-config :fallback-board-ids)]
+          fallback-boards (get jira-config :fallback-board-ids)
+          ;; Get status filter config - exclude Done tickets by default
+          exclude-statuses (get jira-config :sprint-exclude-statuses ["Done"])
+          show-done-tickets (get jira-config :sprint-show-done-tickets false)]
 
       (when project-key
         (let [sprint-data (find-sprints jira-config
@@ -486,12 +489,20 @@
                                      (catch Exception _ "unknown"))
                                    "unknown")
 
+                  ;; Build JQL with optional status filter
                   ;; Get assigned tickets in current sprint - use sprint ID instead of name
+                  status-filter (if (and (not show-done-tickets) (seq exclude-statuses))
+                                  (str " AND status NOT IN ("
+                                       (str/join ", " (map #(str "\"" % "\"") exclude-statuses))
+                                       ")")
+                                  "")
+                  jql (str "assignee = currentUser() "
+                           "AND sprint = " sprint-id
+                           status-filter
+                           " ORDER BY priority DESC")
+
                   assigned-tickets (try
-                                     (let [jql (str "assignee = currentUser() "
-                                                    "AND sprint = " sprint-id " "
-                                                    "ORDER BY priority DESC")
-                                           response (jira-request jira-config :get "/search"
+                                     (let [response (jira-request jira-config :get "/search"
                                                                   {:query-params {:jql jql
                                                                                   :fields "key,summary,status"
                                                                                   :maxResults 10}})]
@@ -502,11 +513,14 @@
                                                         " [" (get-in issue [:fields :status :name]) "]")))))
                                      (catch Exception e
                                        (println (str "Warning: Failed to fetch sprint tickets: " (.getMessage e)))
+                                       (println (str "JQL Query was: " jql))
                                        []))]
 
               {:name sprint-name
+               :id sprint-id
                :days-remaining days-remaining
-               :assigned-tickets assigned-tickets})))))
+               :assigned-tickets assigned-tickets
+               :jql jql})))))
 
     (catch Exception e
       (println (str "Error fetching sprint info: " (.getMessage e)))

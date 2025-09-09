@@ -1,15 +1,13 @@
 (ns lib.config
   (:require
-    [babashka.fs :as fs]
-    [babashka.process :as process]
-    [clojure.edn :as edn]
-    [clojure.string :as str]))
-
+   [babashka.fs :as fs]
+   [babashka.process :as process]
+   [clojure.edn :as edn]
+   [clojure.string :as str]))
 
 (def default-ai-prompt
   "Default AI prompt when neither :prompt nor :prompt-file is configured"
   "Enhance this Jira ticket for clarity and professionalism. Fix spelling and grammar. Keep the same general meaning but improve readability.")
-
 
 (def default-config
   {:jira {:base-url nil
@@ -25,6 +23,8 @@
           :sprint-debug false
           :fallback-board-ids nil
           :sprint-name-pattern nil
+          :sprint-exclude-statuses ["Done"] ; Statuses to exclude from sprint tickets list
+          :sprint-show-done-tickets false ; Override to show all tickets including Done
           :custom-fields {}} ; Map of custom field IDs to values
 
    ;; Unified sprint detection configuration
@@ -64,7 +64,6 @@
 
    :editor nil})
 
-
 (defn expand-path
   "Expand ~ to user home directory"
   [path]
@@ -72,7 +71,6 @@
     (if (str/starts-with? path "~")
       (str (System/getProperty "user.home") (subs path 1))
       path)))
-
 
 (defn resolve-pass-value
   "Resolve a pass: prefixed value by calling the pass command"
@@ -156,7 +154,6 @@
                            :error (.getMessage e)})))))
     value))
 
-
 (defn resolve-pass-references
   "Recursively resolve all pass: references in the config"
   [config]
@@ -164,7 +161,6 @@
     (map? config) (into {} (map (fn [[k v]] [k (resolve-pass-references v)]) config))
     (string? config) (resolve-pass-value config)
     :else config))
-
 
 (defn deep-merge
   "Deep merge two maps, with m2 values taking precedence"
@@ -176,7 +172,6 @@
     (nil? m2) m1
     :else m2))
 
-
 (defn load-edn-file
   "Load and parse an EDN file, returning nil if it doesn't exist"
   [path]
@@ -187,7 +182,6 @@
         (throw (ex-info (str "Failed to parse config file: " path)
                         {:path path
                          :error (.getMessage e)}))))))
-
 
 (defn load-prompt-file
   "Load prompt text from external file, with path expansion support"
@@ -204,7 +198,6 @@
         (throw (ex-info (str "Prompt file not found: " expanded-path)
                         {:path expanded-path}))))))
 
-
 (defn load-home-config
   "Load config from user's home directory (XDG standard location)"
   []
@@ -213,12 +206,10 @@
         xdg-config-path (str (fs/path xdg-config-home "crucible" "config.edn"))]
     (load-edn-file xdg-config-path)))
 
-
 (defn load-project-config
   "Load config from current project directory"
   []
   (load-edn-file "crucible.edn"))
-
 
 (defn get-env-override
   "Get environment variable override for a config path"
@@ -234,7 +225,6 @@
     :editor (get env-map "EDITOR")
     nil))
 
-
 (defn apply-env-overrides
   "Apply environment variable overrides to config"
   [config]
@@ -246,7 +236,6 @@
         (update-in [:workspace :root-dir] #(or (get-env-override env-map [:workspace :root-dir]) %))
         (update :editor #(or (get-env-override env-map [:editor]) %)))))
 
-
 (defn expand-workspace-paths
   "Expand workspace paths to absolute paths"
   [config]
@@ -256,7 +245,6 @@
         (update-in [:workspace :logs-dir] #(str (fs/path root-dir %)))
         (update-in [:workspace :tickets-dir] #(str (fs/path root-dir %)))
         (update-in [:workspace :docs-dir] #(str (fs/path root-dir %))))))
-
 
 (defn normalize-sprint-config
   "Normalize sprint configuration to use new unified format with backward compatibility.
@@ -282,7 +270,6 @@
 
     ;; Return config with normalized sprint section
     (assoc config :sprint normalized-sprint)))
-
 
 (defn resolve-prompt-files
   "Resolve external prompt files in AI config"
@@ -312,7 +299,6 @@
         (assoc-in config [:ai :prompt] default-ai-prompt)))
     config))
 
-
 (defn load-config
   "Load configuration from all sources with proper precedence"
   []
@@ -324,7 +310,6 @@
       (expand-workspace-paths)
       (normalize-sprint-config)
       (resolve-prompt-files)))
-
 
 (defn validate-jira-config
   "Validate that required Jira configuration is present"
@@ -342,7 +327,6 @@
     (when (seq errors)
       errors)))
 
-
 (defn config-locations
   "Return a string describing where config files are loaded from"
   []
@@ -351,7 +335,6 @@
        "  2. ~/.config/crucible/config.edn (user config)\n"
        "  3. Environment variables (CRUCIBLE_*)\n"
        "  4. Built-in defaults"))
-
 
 (defn get-config-file-status
   "Get the actual status of config files and their paths"
@@ -370,7 +353,6 @@
                   :readable (and (fs/exists? xdg-path)
                                  (fs/readable? xdg-path))}}))
 
-
 (defn get-env-var-status
   "Get status of relevant environment variables"
   []
@@ -386,7 +368,6 @@
                                      "*****" ; Hide sensitive values
                                      val))}])
                   env-vars))))
-
 
 (defn ensure-workspace-directories
   "Create missing workspace directories. Returns a map of creation results."
@@ -409,7 +390,6 @@
 
     @results))
 
-
 (defn check-workspace-directories
   "Check which workspace directories are missing and return summary"
   [workspace-config]
@@ -428,7 +408,6 @@
                            :description desc})
                         missing)}))
 
-
 (defn terminal-supports-color?
   "Check if the terminal supports color output"
   []
@@ -441,7 +420,6 @@
                       (str/includes? term "screen")
                       (str/includes? term "tmux")))))))
 
-
 (def color-codes
   "ANSI color codes for terminal output"
   {:red "\033[31m"
@@ -450,7 +428,6 @@
    :blue "\033[34m"
    :reset "\033[0m"})
 
-
 (defn colorize
   "Apply color to text if terminal supports it"
   [text color]
@@ -458,26 +435,21 @@
     (str (get color-codes color "") text (get color-codes :reset ""))
     text))
 
-
 (defn red
   [text]
   (colorize text :red))
-
 
 (defn yellow
   [text]
   (colorize text :yellow))
 
-
 (defn green
   [text]
   (colorize text :green))
 
-
 (defn blue
   [text]
   (colorize text :blue))
-
 
 (defn print-config-error
   "Print a configuration error with helpful context"
