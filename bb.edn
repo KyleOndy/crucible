@@ -123,10 +123,23 @@
   {:doc "Start your day with enhanced context (alias for: crucible start-day)"
    :task (shell "bb crucible start-day")}
 
-  jira-check
-  {:doc "Check Jira configuration and connectivity (alias for: crucible jira-check)"
-   :task (apply shell "bb" "crucible" "jira-check" *command-line-args*)}
-
   doctor
   {:doc "Comprehensive system health check (alias for: crucible doctor)"
-   :task (shell "bb crucible doctor")}}}
+   :task (shell "bb crucible doctor")}
+
+  ;; Development REPL tasks
+  repl
+  {:doc "Start nREPL server for remote debugging"
+   :task (clojure "-M:dev:nrepl")}
+
+  dev-repl
+  {:doc "Start development REPL with crucible loaded"
+   :task (do
+           (require '[clojure.tools.nrepl.server :as nrepl])
+           (require '[lib.config :as config])
+           (require '[lib.jira :as jira])
+           (require '[lib.daily-log :as daily])
+           (println "Starting nREPL server on port 7888...")
+           (nrepl/start-server :port 7888)
+           (println "Connect with your editor to localhost:7888")
+           @(promise))}}}

@@ -17,7 +17,6 @@
        "  help              Show this help\n"
        "  doctor            System health check\n"
        "  inspect-ticket <id> View ticket fields\n"
-       "  jira-check [ticket] Check Jira config\n"
        "  l                 Open daily log\n"
        "  sd                Start day (enhanced log)\n"
        "  pipe [command]    Pipe stdin to log\n"
@@ -122,7 +121,6 @@
     "pipe" (apply (:pipe command-registry) args)
     ("start-day" "sd") (daily-log/start-day-command)
     ("quick-story" "qs") ((:quick-story command-registry) args)
-    "jira-check" (apply jira/run-jira-check args)
     "inspect-ticket" ((:inspect-ticket command-registry) args)
     "doctor" ((:doctor command-registry))
     (do

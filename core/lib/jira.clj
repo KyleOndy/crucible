@@ -640,12 +640,4 @@
       (println (str "Error fetching sprint info: " (.getMessage e)))
       nil)))
 
-(defn run-jira-check
-  "Test Jira connectivity"
-  [& args]
-  (let [config (config/load-config)
-        jira-config (:jira config)
-        conn-result (test-connection jira-config)]
-    (if (:success conn-result)
-      (println "Jira: OK")
-      (println "Jira: FAILED"))))
+
