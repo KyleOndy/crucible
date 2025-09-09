@@ -20,7 +20,7 @@
           :default-fix-version-id nil ; Fix version ID to set for all tickets (e.g. "10100")
           :auto-assign-self true
           :auto-add-to-sprint true
-          :sprint-debug false
+          :debug false ; Enable debug logging for Jira API calls and sprint detection
           :fallback-board-ids nil
           :sprint-name-pattern nil
           :sprint-exclude-statuses ["Done"] ; Statuses to exclude from sprint tickets list
@@ -37,6 +37,7 @@
             :timeout-ms 10000}
 
    :ai {:enabled false
+        :debug false ; Enable debug logging for AI API calls
         :gateway-url nil
         :api-key nil
         :model "gpt-4"
@@ -450,6 +451,16 @@
 (defn blue
   [text]
   (colorize text :blue))
+
+(defn debug-log
+  "Log a debug message to stderr with timestamp if debug is enabled for the section"
+  [section config message]
+  (when (get-in config [section :debug] false)
+    (let [timestamp (.format (java.time.LocalDateTime/now)
+                             (java.time.format.DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss"))
+          section-name (str/upper-case (name section))]
+      (binding [*out* *err*]
+        (println (str "[" timestamp "] [" section-name "-DEBUG] " message))))))
 
 (defn print-config-error
   "Print a configuration error with helpful context"

@@ -265,7 +265,7 @@
                 (status-line "OK" "Sprint" (str "Active sprint: " (:name sprint-info) " (ID: " (:id sprint-info) ")"))
                 (status-line "INFO" "Sprint" (str "Days remaining: " (:days-remaining sprint-info)))
                 (status-line "INFO" "Sprint" (str "Assigned tickets: " (count (:assigned-tickets sprint-info))))
-                (when (:sprint-debug jira-config)
+                (when (:debug jira-config)
                   (status-line "INFO" "Sprint" (str "JQL Query: " (:jql sprint-info))))
 
                 ;; Show ticket status filter configuration

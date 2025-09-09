@@ -17,20 +17,50 @@
 
 (defn jira-request
   "Make an authenticated request to Jira API"
-  [{:keys [base-url username api-token]} method path & [opts]]
+  [{:keys [base-url username api-token debug] :as jira-config} method path & [opts]]
   (let [url (str base-url "/rest/api/3" path)
         auth-header (make-auth-header username api-token)
         default-opts {:headers {"Authorization" auth-header
                                 "Accept" "application/json"
                                 "Content-Type" "application/json"}
                       :throw false}
-        request-opts (merge default-opts opts)
-        response (case method
-                   :get (http/get url request-opts)
-                   :post (http/post url request-opts)
-                   :put (http/put url request-opts)
-                   :delete (http/delete url request-opts))]
-    (update response :body #(when % (json/parse-string % true)))))
+        request-opts (merge default-opts opts)]
+
+    ;; Debug logging for outgoing request
+    (when debug
+      (binding [*out* *err*]
+        (let [timestamp (.format (java.time.LocalDateTime/now)
+                                 (java.time.format.DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss"))]
+          (println (str "[" timestamp "] [JIRA-DEBUG] HTTP " (str/upper-case (name method)) " " url))
+          (when-let [query-params (:query-params request-opts)]
+            (println (str "[" timestamp "] [JIRA-DEBUG] Query params: " query-params)))
+          (when-let [body (:body request-opts)]
+            (println (str "[" timestamp "] [JIRA-DEBUG] Request body: " body))))))
+
+    (let [response (case method
+                     :get (http/get url request-opts)
+                     :post (http/post url request-opts)
+                     :put (http/put url request-opts)
+                     :delete (http/delete url request-opts))
+          parsed-response (update response :body #(when % (json/parse-string % true)))]
+
+      ;; Debug logging for response
+      (when debug
+        (binding [*out* *err*]
+          (let [timestamp (.format (java.time.LocalDateTime/now)
+                                   (java.time.format.DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss"))]
+            (println (str "[" timestamp "] [JIRA-DEBUG] Response status: " (:status response)))
+            (when-let [body (:body parsed-response)]
+              (if (map? body)
+                (do
+                  (println (str "[" timestamp "] [JIRA-DEBUG] Response body keys: " (keys body)))
+                  (when (:issues body)
+                    (println (str "[" timestamp "] [JIRA-DEBUG] Issues count: " (count (:issues body)))))
+                  (when (< (count (str body)) 1000)
+                    (println (str "[" timestamp "] [JIRA-DEBUG] Response body: " body))))
+                (println (str "[" timestamp "] [JIRA-DEBUG] Response body: " body)))))))
+
+      parsed-response)))
 
 (defn test-connection
   "Test Jira connection and authentication"
@@ -502,11 +532,25 @@
                            " ORDER BY priority DESC")
 
                   assigned-tickets (try
+                                     (when (:debug jira-config)
+                                       (binding [*out* *err*]
+                                         (let [timestamp (.format (java.time.LocalDateTime/now)
+                                                                  (java.time.format.DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss"))]
+                                           (println (str "[" timestamp "] [JIRA-DEBUG] Executing JQL: " jql)))))
                                      (let [response (jira-request jira-config :get "/search"
                                                                   {:query-params {:jql jql
                                                                                   :fields "key,summary,status"
-                                                                                  :maxResults 10}})]
-                                       (->> (get-in response [:body :issues] [])
+                                                                                  :maxResults 10}})
+                                           issues (get-in response [:body :issues] [])]
+                                       (when (:debug jira-config)
+                                         (binding [*out* *err*]
+                                           (let [timestamp (.format (java.time.LocalDateTime/now)
+                                                                    (java.time.format.DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss"))]
+                                             (println (str "[" timestamp "] [JIRA-DEBUG] Raw issues from API: " (count issues)))
+                                             (when (seq issues)
+                                               (println (str "[" timestamp "] [JIRA-DEBUG] First issue structure: " (keys (first issues))))
+                                               (println (str "[" timestamp "] [JIRA-DEBUG] First issue fields: " (keys (:fields (first issues)))))))))
+                                       (->> issues
                                             (map (fn [issue]
                                                    (str (:key issue) ": "
                                                         (get-in issue [:fields :summary])
