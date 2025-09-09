@@ -464,10 +464,10 @@
                    "AND updated >= -" activity-days "d "
                    "ORDER BY updated DESC")
 
-          response (jira-request jira-config :get "/search"
-                                 {:query-params {:jql jql
-                                                 :fields "key,summary,status,updated"
-                                                 :maxResults 20}})
+          response (jira-request jira-config :post "/search/jql"
+                                 {:body (json/generate-string {:jql jql
+                                                               :fields ["key" "summary" "status" "updated"]
+                                                               :maxResults 20})})
 
           issues (get-in response [:body :issues] [])]
 
@@ -537,10 +537,10 @@
                                          (let [timestamp (.format (java.time.LocalDateTime/now)
                                                                   (java.time.format.DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss"))]
                                            (println (str "[" timestamp "] [JIRA-DEBUG] Executing JQL: " jql)))))
-                                     (let [response (jira-request jira-config :get "/search"
-                                                                  {:query-params {:jql jql
-                                                                                  :fields "key,summary,status"
-                                                                                  :maxResults 10}})
+                                     (let [response (jira-request jira-config :post "/search/jql"
+                                                                  {:body (json/generate-string {:jql jql
+                                                                                                :fields ["key" "summary" "status"]
+                                                                                                :maxResults 10})})
                                            issues (get-in response [:body :issues] [])]
                                        (when (:debug jira-config)
                                          (binding [*out* *err*]
