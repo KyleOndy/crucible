@@ -1,11 +1,10 @@
 (ns lib.jira
   (:require
-    [babashka.http-client :as http]
-    [cheshire.core :as json]
-    [clojure.string :as str]
-    [lib.adf :as adf]
-    [lib.config :as config]))
-
+   [babashka.http-client :as http]
+   [cheshire.core :as json]
+   [clojure.string :as str]
+   [lib.adf :as adf]
+   [lib.config :as config]))
 
 ;; Core utility functions
 
@@ -15,7 +14,6 @@
   (let [credentials (str username ":" api-token)
         encoded (.encodeToString (java.util.Base64/getEncoder) (.getBytes credentials))]
     (str "Basic " encoded)))
-
 
 (defn jira-request
   "Make an authenticated request to Jira API"
@@ -34,7 +32,6 @@
                    :delete (http/delete url request-opts))]
     (update response :body #(when % (json/parse-string % true)))))
 
-
 (defn test-connection
   "Test Jira connection and authentication"
   [jira-config]
@@ -47,14 +44,12 @@
                                                (:reason-phrase response)))
        :status (:status response)})))
 
-
 (defn get-user-info
   "Get current user information"
   [jira-config]
   (let [response (jira-request jira-config :get "/myself")]
     (when (= 200 (:status response))
       (:body response))))
-
 
 (defn parse-ticket-id
   "Parse and validate a ticket ID (e.g., PROJ-1234)"
@@ -66,7 +61,6 @@
         {:project-key (.group matcher 1)
          :issue-number (.group matcher 2)
          :full-id (str (.group matcher 1) "-" (.group matcher 2))}))))
-
 
 (defn get-ticket
   "Fetch ticket data from Jira"
@@ -99,7 +93,6 @@
     {:success false
      :error (str "Invalid ticket ID format: " ticket-id ". Expected format: PROJ-1234")}))
 
-
 (defn get-ticket-full
   "Fetch complete ticket data from Jira including all custom fields"
   [jira-config ticket-id]
@@ -127,7 +120,6 @@
     {:success false
      :error (str "Invalid ticket ID format: " ticket-id ". Expected format: PROJ-1234")}))
 
-
 (defn format-ticket-summary
   "Format ticket data for display"
   [{:keys [key fields]}]
@@ -140,21 +132,19 @@
      :priority (get-in priority [:name])
      :type (get-in issuetype [:name])}))
 
-
 (defn ^:private get-boards-for-project
   "Get all boards for a project (private - use find-sprints instead)"
   [jira-config project-key]
   (let [agile-url (str (:base-url jira-config) "/rest/agile/1.0")
         auth-header (make-auth-header (:username jira-config) (:api-token jira-config))
         response (http/get
-                   (str agile-url "/board?projectKeyOrId=" project-key)
-                   {:headers {"Authorization" auth-header
-                              "Accept" "application/json"}
-                    :throw false})]
+                  (str agile-url "/board?projectKeyOrId=" project-key)
+                  {:headers {"Authorization" auth-header
+                             "Accept" "application/json"}
+                   :throw false})]
     (when (= 200 (:status response))
       (let [body (json/parse-string (:body response) true)]
         (:values body)))))
-
 
 (defn get-project-active-sprints
   "Find active sprints for a project"
@@ -164,10 +154,10 @@
           auth-header (make-auth-header (:username jira-config) (:api-token jira-config))
           sprint-results (for [board boards]
                            (let [response (http/get
-                                            (str agile-url "/board/" (:id board) "/sprint?state=active")
-                                            {:headers {"Authorization" auth-header
-                                                       "Accept" "application/json"}
-                                             :throw false})]
+                                           (str agile-url "/board/" (:id board) "/sprint?state=active")
+                                           {:headers {"Authorization" auth-header
+                                                      "Accept" "application/json"}
+                                            :throw false})]
                              (when (= 200 (:status response))
                                (let [body (json/parse-string (:body response) true)]
                                  (:values body)))))
@@ -180,7 +170,6 @@
       {:sprints all-sprints
        :board-count (count boards)})))
 
-
 (defn find-sprints
   "Find active sprints for a project with optional fallback board IDs"
   [jira-config {:keys [project-key fallback-board-ids]}]
@@ -190,10 +179,10 @@
               auth-header (make-auth-header (:username jira-config) (:api-token jira-config))
               sprint-results (for [board-id fallback-board-ids]
                                (let [response (http/get
-                                                (str agile-url "/board/" board-id "/sprint?state=active")
-                                                {:headers {"Authorization" auth-header
-                                                           "Accept" "application/json"}
-                                                 :throw false})]
+                                               (str agile-url "/board/" board-id "/sprint?state=active")
+                                               {:headers {"Authorization" auth-header
+                                                          "Accept" "application/json"}
+                                                :throw false})]
                                  (when (= 200 (:status response))
                                    (let [body (json/parse-string (:body response) true)]
                                      (:values body)))))
@@ -207,7 +196,6 @@
             {:sprints all-sprints
              :board-count (count fallback-board-ids)})))))
 
-
 (defn add-issue-to-sprint
   "Add an issue to a sprint"
   [jira-config sprint-id issue-key]
@@ -215,18 +203,16 @@
         auth-header (make-auth-header (:username jira-config) (:api-token jira-config))
         body-data {:issues [issue-key]}
         response (http/post
-                   (str agile-url "/sprint/" sprint-id "/issue")
-                   {:headers {"Authorization" auth-header
-                              "Accept" "application/json"
-                              "Content-Type" "application/json"}
-                    :body (json/generate-string body-data)
-                    :throw false})]
+                  (str agile-url "/sprint/" sprint-id "/issue")
+                  {:headers {"Authorization" auth-header
+                             "Accept" "application/json"
+                             "Content-Type" "application/json"}
+                   :body (json/generate-string body-data)
+                   :throw false})]
     (= 204 (:status response))))
-
 
 ;; ADF conversion - delegated to lib.adf
 (def text->adf adf/text->adf)
-
 
 ;; Legacy functions - these will be removed after full migration to lib.adf
 (defn create-paragraph
@@ -235,7 +221,6 @@
   (when-not (str/blank? text)
     {:type "paragraph"
      :content (adf/parse-inline-formatting text)}))
-
 
 ;; Remove old ADF functions - use lib.adf instead
 
@@ -297,7 +282,6 @@
     :else
     value))
 
-
 (defn prepare-custom-fields
   "Prepare custom fields for Jira API submission.
   
@@ -314,35 +298,34 @@
   ([custom-fields field-mappings]
    (when custom-fields
      (reduce-kv
-       (fn [acc k v]
-         (let [field-key (cond
+      (fn [acc k v]
+        (let [field-key (cond
                            ;; Already has customfield_ prefix
-                           (and (string? k) (str/starts-with? k "customfield_"))
-                           k
+                          (and (string? k) (str/starts-with? k "customfield_"))
+                          k
 
                            ;; Keyword with customfield_ prefix
-                           (and (keyword? k) (str/starts-with? (name k) "customfield_"))
-                           (name k)
+                          (and (keyword? k) (str/starts-with? (name k) "customfield_"))
+                          (name k)
 
                            ;; Numeric ID without prefix
-                           (and (string? k) (re-matches #"\d+" k))
-                           (str "customfield_" k)
+                          (and (string? k) (re-matches #"\d+" k))
+                          (str "customfield_" k)
 
                            ;; Check field mappings for named fields
-                           (contains? field-mappings k)
-                           (get field-mappings k)
+                          (contains? field-mappings k)
+                          (get field-mappings k)
 
-                           (contains? field-mappings (keyword k))
-                           (get field-mappings (keyword k))
+                          (contains? field-mappings (keyword k))
+                          (get field-mappings (keyword k))
 
                            ;; Default: convert to string
-                           :else
-                           (str k))
-               formatted-value (format-custom-field-value v)]
-           (assoc acc field-key formatted-value)))
-       {}
-       custom-fields))))
-
+                          :else
+                          (str k))
+              formatted-value (format-custom-field-value v)]
+          (assoc acc field-key formatted-value)))
+      {}
+      custom-fields))))
 
 (defn get-field-metadata
   "Get metadata for fields including custom fields.
@@ -363,7 +346,6 @@
     (when (= 200 (:status response))
       (:body response))))
 
-
 (defn get-create-metadata
   "Get metadata for creating issues, including custom field definitions and allowed values.
   This is useful for discovering what fields are required/optional and their constraints."
@@ -381,7 +363,6 @@
          :issue-type issue-type
          :fields (:fields issue-type)
          :custom-fields (filter #(str/starts-with? (key %) "customfield_") (:fields issue-type))}))))
-
 
 (defn create-issue
   "Create a new Jira issue with support for complex custom fields.
@@ -401,12 +382,12 @@
         fields (:fields issue-data)
         formatted-fields (if fields
                            (reduce-kv
-                             (fn [acc k v]
-                               (if (and (string? k) (str/starts-with? k "customfield_"))
-                                 (assoc acc k (format-custom-field-value v))
-                                 (assoc acc k v)))
-                             {}
-                             fields)
+                            (fn [acc k v]
+                              (if (and (string? k) (str/starts-with? k "customfield_"))
+                                (assoc acc k (format-custom-field-value v))
+                                (assoc acc k v)))
+                            {}
+                            fields)
                            fields)
         formatted-issue-data (assoc issue-data :fields formatted-fields)
         response (jira-request jira-config :post "/issue" {:body (json/generate-string formatted-issue-data)})]
@@ -437,7 +418,6 @@
                                                   (:reason-phrase response)))
        :details (:body response)
        :status (:status response)})))
-
 
 ;; High-level functions
 
@@ -475,7 +455,6 @@
       (println (str "Error fetching Jira activity: " (.getMessage e)))
       [])))
 
-
 (defn get-current-sprint-info
   "Get current sprint information for the user"
   [jira-config]
@@ -493,6 +472,7 @@
 
           (when active-sprint
             (let [sprint-name (:name active-sprint)
+                  sprint-id (:id active-sprint)
                   end-date-str (:endDate active-sprint)
 
                   ;; Calculate days remaining (simplified - could be more precise)
@@ -506,10 +486,10 @@
                                      (catch Exception _ "unknown"))
                                    "unknown")
 
-                  ;; Get assigned tickets in current sprint (simplified)
+                  ;; Get assigned tickets in current sprint - use sprint ID instead of name
                   assigned-tickets (try
                                      (let [jql (str "assignee = currentUser() "
-                                                    "AND sprint = \"" sprint-name "\" "
+                                                    "AND sprint = " sprint-id " "
                                                     "ORDER BY priority DESC")
                                            response (jira-request jira-config :get "/search"
                                                                   {:query-params {:jql jql
@@ -520,7 +500,8 @@
                                                    (str (:key issue) ": "
                                                         (get-in issue [:fields :summary])
                                                         " [" (get-in issue [:fields :status :name]) "]")))))
-                                     (catch Exception _
+                                     (catch Exception e
+                                       (println (str "Warning: Failed to fetch sprint tickets: " (.getMessage e)))
                                        []))]
 
               {:name sprint-name
@@ -530,7 +511,6 @@
     (catch Exception e
       (println (str "Error fetching sprint info: " (.getMessage e)))
       nil)))
-
 
 (defn run-jira-check
   "Test Jira connectivity"
