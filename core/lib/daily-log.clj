@@ -110,14 +110,23 @@
             (recur (inc days-back))))))))
 
 (defn extract-uncompleted-tasks
-  "Extract uncompleted tasks from daily log content"
+  "Extract uncompleted tasks from daily log content, preserving indentation for nested tasks"
   [log-content]
   (when log-content
     (let [lines (str/split-lines log-content)]
       (->> lines
            (filter #(str/includes? % "- [ ]"))
-           (map #(str/trim (str/replace % #"^\s*-\s*\[\s*\]\s*" "")))
-           (filter #(not (str/blank? %)))))))
+           (map (fn [line]
+                  ;; Find the indentation level (spaces before the -)
+                  (let [trimmed-line (str/triml line)
+                        original-length (count line)
+                        trimmed-length (count trimmed-line)
+                        indent-spaces (- original-length trimmed-length)
+                        ;; Remove the "- [ ] " part but keep the indentation
+                        task-text (str/replace trimmed-line #"^-\s*\[\s*\]\s*" "")]
+                    ;; Reconstruct with preserved indentation
+                    (str (str/join "" (repeat indent-spaces " ")) task-text))))
+           (filter #(not (str/blank? (str/trim %))))))))
 
 (defn gather-start-day-context
   "Collect all context for start of day"
@@ -181,7 +190,14 @@
       ;; Carried forward tasks
       (seq carried-tasks)
       (concat ["" "### Carried Forward Tasks"]
-              (map #(str "- [ ] " %) carried-tasks))
+              (map (fn [task]
+                     ;; Check if task already has indentation (nested task)
+                     (if (str/starts-with? task " ")
+                       ;; Nested task: add checkbox but preserve indentation
+                       (str "- [ ]" task)
+                       ;; Top-level task: normal formatting
+                       (str "- [ ] " task)))
+                   carried-tasks))
 
       ;; Jira activity
       (seq jira-activity)
