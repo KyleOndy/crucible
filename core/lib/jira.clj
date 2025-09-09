@@ -477,7 +477,7 @@
            (map (fn [issue]
                   (let [key (:key issue)
                         summary (get-in issue [:fields :summary])
-                        status (get-in issue [:fields :status :name])
+                        status (or (get-in issue [:fields :status :name]) (get-in issue [:fields :status]))
                         updated (get-in issue [:fields :updated])]
                     (str key ": " summary " [" status "]"))))))
 
@@ -554,7 +554,7 @@
                                             (map (fn [issue]
                                                    (str (:key issue) ": "
                                                         (get-in issue [:fields :summary])
-                                                        " [" (get-in issue [:fields :status :name]) "]")))))
+                                                        " [" (or (get-in issue [:fields :status :name]) (get-in issue [:fields :status])) "]")))))
                                      (catch Exception e
                                        (println (str "Warning: Failed to fetch sprint tickets: " (.getMessage e)))
                                        (println (str "JQL Query was: " jql))
