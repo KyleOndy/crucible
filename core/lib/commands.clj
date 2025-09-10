@@ -13,9 +13,11 @@
    (java.time.format DateTimeFormatter)))
 
 (defn log-command
-  [subcommand]
+  [subcommand & args]
   (case subcommand
-    "daily" (daily-log/open-daily-log)
+    "daily" (if (seq args)
+              (daily-log/open-log-for-relative-date (first args))
+              (daily-log/open-daily-log))
     (println (str "Unknown log subcommand: " subcommand))))
 
 (defn pipe-command

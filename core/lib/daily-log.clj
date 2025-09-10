@@ -89,6 +89,38 @@
     (create-daily-log-from-template log-path)
     (launch-editor log-path)))
 
+(defn open-log-for-relative-date
+  "Open log for a date relative to today (negative numbers for past, 'yesterday' for -1)"
+  [date-spec]
+  (let [days-ago (cond
+                   (= date-spec "yesterday") 1
+                   (string? date-spec)
+                   (try
+                     (let [num (Integer/parseInt date-spec)]
+                       (if (< num 0)
+                         (- num)  ; Convert negative to positive
+                         num))
+                     (catch Exception _
+                       (do
+                         (println (str "Invalid date specification: " date-spec))
+                         (println "Use 'yesterday', '-1', '-2', etc.")
+                         (System/exit 1))))
+                   (number? date-spec) (Math/abs date-spec)
+                   :else (do
+                           (println "Invalid date specification")
+                           (System/exit 1)))
+        target-date (.minusDays (LocalDate/now) days-ago)
+        date-str (.toString target-date)
+        log-path (get-log-path-for-date date-str)]
+    
+    (if (fs/exists? log-path)
+      (do
+        (println (str "Opening log from " date-str " (" days-ago " day" (when (not= days-ago 1) "s") " ago)"))
+        (launch-editor log-path))
+      (do
+        (println (str "No log found for " date-str))
+        (System/exit 1)))))
+
 (defn find-last-working-log
   "Find the most recent daily log file, going back up to configured days"
   []

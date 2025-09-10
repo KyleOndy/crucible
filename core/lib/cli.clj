@@ -113,11 +113,28 @@
   [command args command-registry]
   (case command
     "help" (println (help-text))
-    ("log" "l") (if (or (= command "l") (nil? (first args)))
+    ("log" "l") (cond
+                  ;; Shorthand 'l' with args goes directly to relative date
+                  (and (= command "l") (seq args))
+                  (daily-log/open-log-for-relative-date (first args))
+                  
+                  ;; Shorthand 'l' without args opens today's log
+                  (= command "l")
                   (daily-log/open-daily-log)
-                  (case (first args)
-                    "daily" (daily-log/open-daily-log)
-                    (println (str "Unknown log subcommand: " (first args)))))
+                  
+                  ;; Full 'log' command without args opens today's log
+                  (nil? (first args))
+                  (daily-log/open-daily-log)
+                  
+                  ;; Full 'log daily' with optional date arg
+                  (= (first args) "daily")
+                  (if (seq (rest args))
+                    (daily-log/open-log-for-relative-date (second args))
+                    (daily-log/open-daily-log))
+                  
+                  ;; Unknown subcommand
+                  :else
+                  (println (str "Unknown log subcommand: " (first args))))
     "pipe" (apply (:pipe command-registry) args)
     ("start-day" "sd") (daily-log/start-day-command)
     ("quick-story" "qs") ((:quick-story command-registry) args)

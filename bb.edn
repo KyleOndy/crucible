@@ -102,8 +102,8 @@
 
   ;; Convenience aliases for common commands
   l
-  {:doc "Open daily log (alias for: crucible log daily)"
-   :task (shell "bb crucible log daily")}
+  {:doc "Open daily log (alias for: crucible l)"
+   :task (apply shell "bb" "crucible" "l" *command-line-args*)}
 
   pipe
   {:doc "Pipe stdin to daily log (alias for: crucible pipe)"
