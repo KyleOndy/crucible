@@ -44,35 +44,6 @@
             # Optional: direnv for automatic environment loading
             direnv
           ];
-
-          shellHook =
-            let
-              config = mcp-servers-nix.lib.mkConfig pkgs {
-                programs = {
-                  playwright.enable = true;
-                };
-                settings.servers = {
-                  clojure-mcp = {
-                    command = "/bin/sh";
-                    args = [
-                      "-c"
-                      "PORT=$(cat .nrepl-port); clojure -X:mcp :port $PORT"
-                    ];
-
-                  };
-                };
-              };
-            in
-            ''
-              if [ -L ".mcp.json" ]; then
-                unlink .mcp.json
-              fi
-              ln -sf ${config} .mcp.json
-
-              # Set up npm cache directory
-              export NPM_CONFIG_CACHE=$PWD/.npm-cache
-              mkdir -p $NPM_CONFIG_CACHE
-            '';
         };
       }
     );

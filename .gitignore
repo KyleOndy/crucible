@@ -1,6 +1,3 @@
-# generated with flake.nix
-.mcp.json
-
 # direnv cache (nix+direnv)
 .direnv/
 
