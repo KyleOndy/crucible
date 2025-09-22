@@ -13,11 +13,9 @@
   [file-path]
   (if (fs/absolute? file-path)
     file-path
-    ;; For relative paths, try user's directory first
     (if-let [user-dir (System/getenv "CRUCIBLE_USER_DIR")]
-      (fs/path user-dir file-path)
-      ;; Fallback to current directory if env var not set
-      file-path)))
+      (str (fs/absolutize (fs/path user-dir file-path)))
+      (str (fs/absolutize file-path)))))
 
 
 (defn get-initial-ticket-data

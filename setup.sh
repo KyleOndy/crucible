@@ -23,7 +23,7 @@ cat >"$INSTALL_DIR/c" <<EOF
 #!/usr/bin/env bash
 # Capture user's current directory before changing
 export CRUCIBLE_USER_DIR="\$PWD"
-cd "$CRUCIBLE_DIR" && bb crucible "\$@"
+exec bash -c 'cd "\$1" && bb crucible "\${@:2}"' _ "$CRUCIBLE_DIR" "\$@"
 EOF
 
 chmod +x "$INSTALL_DIR/c"
