@@ -6,7 +6,8 @@
  :tasks
  {:requires ([babashka.fs :as fs]
              [babashka.nrepl.server :as srv]
-             [babashka.process :as p])
+             [babashka.process :as p]
+             [clojure.string :as str])
 
   nrepl
   {:doc "Start nREPL server for MCP integration (in background)"
@@ -149,4 +150,43 @@
            (srv/start-server! {:host "localhost" :port 7889})
            (println "Connect with your editor to localhost:7889")
            (println "All Crucible namespaces loaded and ready for debugging")
-           (deref (promise)))}}}
+           (deref (promise)))}
+
+  ;; Clojure nREPL tasks for MCP integration
+  clj-nrepl:start
+  {:doc "Start Clojure nREPL server for MCP (background, random port)"
+   :task (do
+           (if (fs/exists? ".nrepl-port")
+             (println "Clojure nREPL already running on port" (str/trim (slurp ".nrepl-port")))
+             (do
+               (println "Starting Clojure nREPL server...")
+               (p/process {:out :inherit
+                           :err :inherit}
+                          "clojure" "-A:nrepl")
+               (Thread/sleep 2000)
+               (if (fs/exists? ".nrepl-port")
+                 (println "Clojure nREPL started on port" (str/trim (slurp ".nrepl-port")))
+                 (println "Failed to start Clojure nREPL server")))))}
+
+  clj-nrepl:stop
+  {:doc "Stop Clojure nREPL server"
+   :task (do
+           (if (fs/exists? ".nrepl-port")
+             (let [port (str/trim (slurp ".nrepl-port"))]
+               (println "Stopping Clojure nREPL on port" port)
+               (try
+                 (p/shell "pkill" "-f" (str "clojure.*:nrepl.*port.*" port))
+                 (catch Exception e
+                   (try
+                     (p/shell "pkill" "-f" "clojure.*-A:nrepl")
+                     (catch Exception e2
+                       (println "Could not find Clojure nREPL process")))))
+               (fs/delete ".nrepl-port")
+               (println "Clojure nREPL stopped"))
+             (println "No Clojure nREPL running")))}
+
+  clj-nrepl:status
+  {:doc "Check Clojure nREPL server status"
+   :task (if (fs/exists? ".nrepl-port")
+           (println "Clojure nREPL running on port" (str/trim (slurp ".nrepl-port")))
+           (println "No Clojure nREPL running"))}}}
