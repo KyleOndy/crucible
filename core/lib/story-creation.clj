@@ -1,12 +1,24 @@
 (ns lib.story-creation
   "Story creation and Jira ticket building logic"
   (:require
-   [babashka.fs :as fs]
-   [clojure.string :as str]
-   [lib.ai :as ai]
-   [lib.config :as config]
-   [lib.jira :as jira]
-   [lib.ticket-editor :as ticket-editor]))
+    [babashka.fs :as fs]
+    [clojure.string :as str]
+    [lib.ai :as ai]
+    [lib.jira :as jira]
+    [lib.ticket-editor :as ticket-editor]))
+
+
+(defn resolve-file-path
+  "Resolve file path - absolute paths as-is, relative paths from user's directory"
+  [file-path]
+  (if (fs/absolute? file-path)
+    file-path
+    ;; For relative paths, try user's directory first
+    (if-let [user-dir (System/getenv "CRUCIBLE_USER_DIR")]
+      (fs/path user-dir file-path)
+      ;; Fallback to current directory if env var not set
+      file-path)))
+
 
 (defn get-initial-ticket-data
   "Get initial ticket data from various input sources"
@@ -15,15 +27,16 @@
     (cond
       ;; File input
       file
-      (if (fs/exists? file)
-        (let [content (slurp file)
-              lines (str/split-lines content)
-              title (first lines)
-              description (str/join "\n" (rest lines))]
-          {:title title :description description})
-        (do
-          (println (str "Error: File not found: " file))
-          (System/exit 1)))
+      (let [resolved-path (resolve-file-path file)]
+        (if (fs/exists? resolved-path)
+          (let [content (slurp (str resolved-path))
+                lines (str/split-lines content)
+                title (first lines)
+                description (str/join "\n" (rest lines))]
+            {:title title :description description})
+          (do
+            (println (str "Error: File not found: " resolved-path))
+            (System/exit 1))))
 
       ;; Editor input
       editor
@@ -35,6 +48,7 @@
 
       ;; No input provided
       :else nil)))
+
 
 (defn handle-missing-input
   "Handle cases where no input was provided"
@@ -65,6 +79,7 @@
           (println "   or: crucible qs --recover <filename>  (recover from draft)")
           (System/exit 1))))))
 
+
 (defn apply-ai-enhancement
   "Apply AI enhancement to ticket content if enabled"
   [initial-data flags ai-config]
@@ -77,6 +92,7 @@
         (println "Enhancing content with AI...")
         (ai/enhance-content initial-data ai-config))
       initial-data)))
+
 
 (defn handle-ai-review
   "Handle AI review editor for enhanced content"
@@ -94,6 +110,7 @@
             (println "Review cancelled - ticket creation aborted")
             (System/exit 0))))
       enhanced-data)))
+
 
 (defn handle-ai-only-mode
   "Handle AI-only mode that exits without creating Jira ticket"
@@ -114,6 +131,7 @@
       (println "====================")
       (System/exit 0))))
 
+
 (defn handle-dry-run-mode
   "Handle dry-run mode that shows what would be created"
   [flags final-data sprint-info jira-config]
@@ -132,11 +150,13 @@
         (println "Sprint: No active sprint found (would not be added to sprint)"))
       (System/exit 0))))
 
+
 (defn validate-jira-config
   "Validate Jira configuration before creating ticket"
   [jira-config]
   (when-not (:base-url jira-config) (System/exit 1))
   (when-not (:default-project jira-config) (System/exit 1)))
+
 
 (defn build-issue-data
   "Build Jira issue data with all configured fields"
@@ -184,6 +204,7 @@
                      (update issue-data :fields merge custom-fields-with-story-points)
                      issue-data)]
     issue-data))
+
 
 (defn create-jira-ticket
   "Create the Jira ticket and handle success/failure"

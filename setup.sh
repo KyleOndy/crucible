@@ -21,6 +21,8 @@ CRUCIBLE_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Create the wrapper script
 cat >"$INSTALL_DIR/c" <<EOF
 #!/usr/bin/env bash
+# Capture user's current directory before changing
+export CRUCIBLE_USER_DIR="\$PWD"
 cd "$CRUCIBLE_DIR" && bb crucible "\$@"
 EOF
 
