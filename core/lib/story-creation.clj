@@ -21,7 +21,9 @@
               title (first lines)
               description (str/join "\n" (rest lines))]
           {:title title :description description})
-        (System/exit 1))
+        (do
+          (println (str "Error: File not found: " file))
+          (System/exit 1)))
 
       ;; Editor input
       editor
