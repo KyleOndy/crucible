@@ -25,10 +25,10 @@
     (throw (ex-info "Variables must be a map"
                     {:type :invalid-input, :value vars})))
   (->>
-    vars
-    (reduce (fn [text [var-name var-value]]
-              (str/replace text (str "{" (name var-name) "}") (str var-value)))
-      template)))
+   vars
+   (reduce (fn [text [var-name var-value]]
+             (str/replace text (str "{" (name var-name) "}") (str var-value)))
+           template)))
 
 (defn build-messages-from-template
   "Build messages array from configurable template"
@@ -73,43 +73,70 @@
   (let [base {"Authorization" (str "Bearer " (:api-key ai-config)),
               "Content-Type" "application/json",
               "User-Agent"
-                "Crucible/1.0 (+https://github.com/KyleOndy/crucible)"}]
+              "Crucible/1.0 (+https://github.com/KyleOndy/crucible)"}]
     (if (str/includes? (:gateway-url ai-config) "openrouter.ai")
       (merge base
              {"HTTP-Referer" "crucible-cli",
               "X-Title" "Crucible Development Tool"})
       base)))
 
-(defn unwrap-json-code-block
-  "Extract JSON content from markdown code blocks like ```json\n{...}\n```"
+(defn parse-json-content
+  "Parse JSON content from various formats: code blocks, direct JSON strings, or plain text"
   [text]
   (when (and text (string? text))
-    (if-let [match (re-find #"(?s)```json\s*\n(.*?)\n```" text)]
-      (try (json/parse-string (second match) true)
+    (cond
+      ;; First try: Extract JSON from markdown code blocks
+      (re-find #"(?s)```json\s*\n(.*?)\n```" text)
+      (let [match (re-find #"(?s)```json\s*\n(.*?)\n```" text)]
+        (try (json/parse-string (second match) true)
+             (catch Exception _
+               ;; If JSON parsing fails, return original text
+               text)))
+
+      ;; Second try: Parse text directly as JSON string
+      (and (str/starts-with? (str/trim text) "{")
+           (str/ends-with? (str/trim text) "}"))
+      (try (json/parse-string (str/trim text) true)
            (catch Exception _
-             ;; If JSON parsing fails, return original text
+             ;; If direct JSON parsing fails, return original text
              text))
-      ;; If no code block pattern found, return original text
-      text)))
+
+      ;; Fallback: Return original text if neither pattern matches
+      :else text)))
 
 (defn extract-content
   "Extract content from AI response using multiple possible paths"
   [response-body config]
   (let [parsed (json/parse-string response-body true)
         paths (or (:response-paths config) default-response-paths)
-        extracted-content (some #(get-in parsed %) paths)
-        ;; Try to unwrap JSON code blocks from the extracted content
-        unwrapped-content (unwrap-json-code-block extracted-content)]
+        ;; Try each path and track which one succeeds
+        extracted-result (reduce (fn [acc path]
+                                   (if (:content acc)
+                                     acc ;; Already found content, skip
+                                     (let [content (get-in parsed path)]
+                                       (if content
+                                         {:content content, :successful-path path}
+                                         acc))))
+                                 {} paths)
+        extracted-content (:content extracted-result)
+        successful-path (:successful-path extracted-result)
+        ;; Try to parse JSON content from the extracted content
+        parsed-content (parse-json-content extracted-content)]
     (when (:debug config)
       (println "\n=== DEBUG: Content Extraction ===")
       (println "Available response keys:" (keys parsed))
       (println "Trying paths:" paths)
-      (println "Extracted content:" (pr-str extracted-content))
-      (when (not= extracted-content unwrapped-content)
-        (println "Unwrapped JSON code block:" (pr-str unwrapped-content)))
-      (println "Final content:" (pr-str unwrapped-content))
+      (if successful-path
+        (println "SUCCESS: Found content at path:" successful-path)
+        (println "WARNING: No content found at any path"))
+      (println "Raw extracted content:" (pr-str extracted-content))
+      (when (not= extracted-content parsed-content)
+        (println "Parsed JSON content:" (pr-str parsed-content)))
+      (println "Final content type:" (type parsed-content))
+      (when (map? parsed-content)
+        (println "Final content keys:" (keys parsed-content)))
       (println "================================\n"))
-    unwrapped-content))
+    parsed-content))
 
 (defn call-ai-model
   "Core function to call AI model with a simple prompt string"
@@ -145,7 +172,7 @@
                 (if (= k "Authorization")
                   (println (str "  " k
                                 ": "
-                                  (if (str/blank? v) "[EMPTY]" "[REDACTED]")))
+                                (if (str/blank? v) "[EMPTY]" "[REDACTED]")))
                   (println (str "  " k ": " v))))
               (println "\n--- Request Body (JSON) ---")
               (try (let [pretty-json (json/generate-string request-body
@@ -187,36 +214,36 @@
       ;; Return structured response using cond-> for cleaner flow
       (cond-> {:status (:status response), :body (:body response)}
         (= 200 (:status response))
-          (assoc :success
-            true :response
-            (json/parse-string (:body response) true) :content
-            (extract-content (:body response) ai-config))
+        (assoc :success
+               true :response
+               (json/parse-string (:body response) true) :content
+               (extract-content (:body response) ai-config))
         (= 400 (:status response)) (assoc :success
-                                     false :error
-                                     :bad-request :message
-                                     "Bad request - invalid JSON or parameters"
-                                       :details
-                                     (:body response))
+                                          false :error
+                                          :bad-request :message
+                                          "Bad request - invalid JSON or parameters"
+                                          :details
+                                          (:body response))
         (= 401 (:status response)) (assoc :success
-                                     false :error
-                                     :unauthorized :message
-                                     "Authentication failed - check API key"
-                                       :details
-                                     (:body response))
+                                          false :error
+                                          :unauthorized :message
+                                          "Authentication failed - check API key"
+                                          :details
+                                          (:body response))
         (= 429 (:status response)) (assoc :success
-                                     false :error
-                                     :rate-limited :message
-                                     "Rate limited by AI gateway" :details
-                                     (:body response))
+                                          false :error
+                                          :rate-limited :message
+                                          "Rate limited by AI gateway" :details
+                                          (:body response))
         (and (not= 200 (:status response))
              (not= 400 (:status response))
              (not= 401 (:status response))
              (not= 429 (:status response)))
-          (assoc :success
-            false :error
-            :api-error :message
-            (str "AI gateway returned " (:status response)) :details
-            (:body response))))
+        (assoc :success
+               false :error
+               :api-error :message
+               (str "AI gateway returned " (:status response)) :details
+               (:body response))))
     (catch java.net.SocketTimeoutException _
       {:success false, :error :timeout, :message "AI gateway timeout"})
     (catch Exception e
@@ -237,9 +264,9 @@
   (println "Enhancing content with AI...")
   ;; Build Jira-specific prompt from title and description
   (let [vars {:prompt
-                (:prompt
-                  ai-config
-                  "Enhance this Jira ticket for clarity and professionalism."),
+              (:prompt
+               ai-config
+               "Enhance this Jira ticket for clarity and professionalism."),
               :title title,
               :description (or description ""),
               :title_and_description (str "Title: "
@@ -259,11 +286,11 @@
         ;; Create a simple prompt string from the messages (take the last
         ;; user message)
         prompt (->>
-                 messages
-                 (filter #(= "user" (:role %)))
-                 last
-                 :content
-                 (or (str (:prompt vars) "\n\n" (:title_and_description vars))))
+                messages
+                (filter #(= "user" (:role %)))
+                last
+                :content
+                (or (str (:prompt vars) "\n\n" (:title_and_description vars))))
         ;; Call the core AI function
         result (call-ai-model prompt ai-config)]
     (if (:success result)
@@ -274,31 +301,31 @@
                 (println (str "Raw AI content: " (pr-str content-text)))
                 (println "Attempting to parse response..."))
             enhanced
-              (if content-text
-                ;; Try to parse JSON response for structured enhancement
-                (try (let [parsed-content (json/parse-string content-text true)
-                           _ (when (:debug ai-config)
-                               (println "Successfully parsed as JSON:")
-                               (println (json/generate-string parsed-content
-                                                              {:pretty true})))]
-                       {:title (or (:title parsed-content)
-                                   (:enhanced_title parsed-content)
-                                   title),
-                        :description (or (:description parsed-content)
-                                         (:enhanced_description parsed-content)
-                                         description)})
-                     (catch Exception e
-                       (when (:debug ai-config)
-                         (println (str "JSON parsing failed: " (.getMessage e)))
-                         (println "Using content as enhanced description"))
-                       ;; If parsing fails, use the content as enhanced
-                       ;; description
-                       {:title title,
-                        :description (or content-text description)}))
-                ;; Fallback to original content if no content found
-                (do (when (:debug ai-config)
-                      (println "No content received from AI - using original"))
-                    {:title title, :description description}))
+            (cond
+              ;; Content was successfully parsed as structured data
+              (map? content-text)
+              (do (when (:debug ai-config)
+                    (println "Using parsed structured content:")
+                    (println (json/generate-string content-text {:pretty true})))
+                  {:title (or (:title content-text)
+                              (:enhanced_title content-text)
+                              title),
+                   :description (or (:description content-text)
+                                    (:enhanced_description content-text)
+                                    description)})
+
+              ;; Content is a string - use as enhanced description
+              (string? content-text)
+              (do (when (:debug ai-config)
+                    (println "Using string content as enhanced description"))
+                  {:title title,
+                   :description (or content-text description)})
+
+              ;; No content received - use original
+              :else
+              (do (when (:debug ai-config)
+                    (println "No content received from AI - using original"))
+                  {:title title, :description description}))
             _ (when (:debug ai-config)
                 (println "\n--- Final Enhancement Result ---")
                 (println (str "Original title: " (pr-str title)))
@@ -314,11 +341,11 @@
       ;; Handle errors - print error and return original content
       (do (case (:error result)
             :unauthorized
-              (println
-                "AI authentication failed - check your API key configuration")
+            (println
+             "AI authentication failed - check your API key configuration")
             :timeout (println "AI gateway timeout, using original content")
             :rate-limited (println
-                            "AI gateway rate limited, using original content")
+                           "AI gateway rate limited, using original content")
             (println (:message result)))
           (when (:debug ai-config)
             (println "\n=== DEBUG: AI Error - Using Original Content ===")
@@ -361,21 +388,21 @@
       {:success (= 200 (:status response)),
        :status (:status response),
        :message
-         (cond (= 200 (:status response)) "Gateway is accessible and working"
-               (= 400 (:status response)) (str "Bad request (400): "
-                                               (:body response))
-               (= 401 (:status response))
-                 "Authentication failed (401) - check API key"
-               (= 403 (:status response))
-                 "Access forbidden (403) - check permissions"
-               (= 404 (:status response))
-                 "Endpoint not found (404) - check gateway URL"
-               (= 429 (:status response))
-                 "Rate limited (429) - gateway is accessible but rate limited"
-               :else (str "Gateway error: "
-                          (:status response)
-                          (when (:body response)
-                            (str " - " (:body response)))))})
+       (cond (= 200 (:status response)) "Gateway is accessible and working"
+             (= 400 (:status response)) (str "Bad request (400): "
+                                             (:body response))
+             (= 401 (:status response))
+             "Authentication failed (401) - check API key"
+             (= 403 (:status response))
+             "Access forbidden (403) - check permissions"
+             (= 404 (:status response))
+             "Endpoint not found (404) - check gateway URL"
+             (= 429 (:status response))
+             "Rate limited (429) - gateway is accessible but rate limited"
+             :else (str "Gateway error: "
+                        (:status response)
+                        (when (:body response)
+                          (str " - " (:body response)))))})
     (catch Exception e
       (when (:debug ai-config)
         (println "\n=== DEBUG: Gateway Test Exception ===")
