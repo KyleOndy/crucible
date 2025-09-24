@@ -89,36 +89,57 @@
                                              {:error (.getMessage e)}))))
           ;; Build headers
           headers (build-headers ai-config)
-          ;; Debug: Show request details
+          ;; Debug: Show detailed request/response information
           _ (when (:debug ai-config)
-              (println "\n=== DEBUG: AI Model Call ===")
+              (println "\n=== DEBUG: AI Request/Response ===")
+              (println (str "Timestamp: " (java.time.Instant/now)))
               (println (str "URL: " (:gateway-url ai-config)))
               (println (str "Model: " (:model request-body)))
               (println (str "Max tokens: " (:max_tokens request-body)))
-              (println (str "Prompt: " prompt))
-              (println "\nHeaders:")
+              (println (str "Prompt length: " (count prompt) " characters"))
+              (println "\n--- Request Headers ---")
               (doseq [[k v] headers]
                 (if (= k "Authorization")
                   (println (str "  " k
                                 ": "
                                 (if (str/blank? v) "[EMPTY]" "[REDACTED]")))
                   (println (str "  " k ": " v))))
+              (println "\n--- Request Body (JSON) ---")
+              (try
+                (let [pretty-json (json/generate-string request-body {:pretty true})]
+                  (println pretty-json))
+                (catch Exception e
+                  (println (str "Failed to pretty-print JSON: " (.getMessage e)))
+                  (println json-string)))
               (println (str "\nJSON byte length: "
                             (count (.getBytes json-string "UTF-8"))
                             " bytes"))
-              (println "============================\n"))
+              (println "==================================\n"))
           response (http/post (:gateway-url ai-config)
                               {:headers headers,
                                :body json-string,
                                :timeout (:timeout-ms ai-config 5000),
                                :throw false})
-          ;; Debug: Show response details for non-200 status
-          _ (when (and (:debug ai-config) (not= 200 (:status response)))
-              (println "\n=== DEBUG: Response Details ===")
+          ;; Debug: Show response details for all responses when debugging
+          _ (when (:debug ai-config)
+              (println "\n=== DEBUG: AI Response ===")
+              (println (str "Response timestamp: " (java.time.Instant/now)))
               (println (str "Status: " (:status response)))
-              (println (str "Headers: " (:headers response)))
-              (println (str "Body: " (:body response)))
-              (println "==============================\n"))]
+              (println "\n--- Response Headers ---")
+              (doseq [[k v] (:headers response)]
+                (println (str "  " k ": " v)))
+              (println "\n--- Response Body ---")
+              (if-let [body (:body response)]
+                (try
+                  ;; Try to pretty-print JSON response
+                  (let [parsed-body (json/parse-string body true)
+                        pretty-body (json/generate-string parsed-body {:pretty true})]
+                    (println pretty-body))
+                  (catch Exception _
+                    ;; If not JSON, just print raw body
+                    (println body)))
+                (println "[No response body]"))
+              (println "==========================\n"))]
       ;; Return structured response using cond-> for cleaner flow
       (cond-> {:status (:status response)
                :body (:body response)}
@@ -200,22 +221,44 @@
     (if (:success result)
       ;; Parse the response for ticket enhancement
       (let [content-text (:content result)
+            _ (when (:debug ai-config)
+                (println "\n=== DEBUG: Content Parsing ===")
+                (println (str "Raw AI content: " (pr-str content-text)))
+                (println "Attempting to parse response..."))
             enhanced
             (if content-text
                 ;; Try to parse JSON response for structured enhancement
-              (try (let [parsed-content (json/parse-string content-text true)]
+              (try (let [parsed-content (json/parse-string content-text true)
+                         _ (when (:debug ai-config)
+                             (println "Successfully parsed as JSON:")
+                             (println (json/generate-string parsed-content {:pretty true})))]
                      {:title (or (:title parsed-content)
                                  (:enhanced_title parsed-content)
                                  title),
                       :description (or (:description parsed-content)
                                        (:enhanced_description parsed-content)
                                        description)})
-                   (catch Exception _
+                   (catch Exception e
+                     (when (:debug ai-config)
+                       (println (str "JSON parsing failed: " (.getMessage e)))
+                       (println "Using content as enhanced description"))
                        ;; If parsing fails, use the content as enhanced description
                      {:title title,
                       :description (or content-text description)}))
                 ;; Fallback to original content if no content found
-              {:title title, :description description})]
+              (do
+                (when (:debug ai-config)
+                  (println "No content received from AI - using original"))
+                {:title title, :description description}))
+            _ (when (:debug ai-config)
+                (println "\n--- Final Enhancement Result ---")
+                (println (str "Original title: " (pr-str title)))
+                (println (str "Enhanced title: " (pr-str (:title enhanced))))
+                (println (str "Title changed: " (not= title (:title enhanced))))
+                (println (str "Original description: " (pr-str description)))
+                (println (str "Enhanced description: " (pr-str (:description enhanced))))
+                (println (str "Description changed: " (not= description (:description enhanced))))
+                (println "===============================\n"))]
         enhanced)
       ;; Handle errors - print error and return original content
       (do (case (:error result)
@@ -226,6 +269,11 @@
             :rate-limited (println
                            "AI gateway rate limited, using original content")
             (println (:message result)))
+          (when (:debug ai-config)
+            (println "\n=== DEBUG: AI Error - Using Original Content ===")
+            (println (str "Error type: " (:error result)))
+            (println (str "Error message: " (:message result)))
+            (println "================================================\n"))
           {:title title, :description description}))))
 
 (defn test-gateway
