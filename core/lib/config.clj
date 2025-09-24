@@ -51,8 +51,7 @@
         :prompt-file nil, ; Path to external prompt file (alternative to
                           ; :prompt)
         ;; Response parsing paths - can be customized for different AI
-        ;; providers
-        ;; Defaults to common response structures (defined in
+        ;; providers Defaults to common response structures (defined in
         ;; lib.ai/default-response-paths)
         :response-paths nil, ; Override if provider uses non-standard
                              ; response format

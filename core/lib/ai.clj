@@ -80,19 +80,36 @@
               "X-Title" "Crucible Development Tool"})
       base)))
 
+(defn unwrap-json-code-block
+  "Extract JSON content from markdown code blocks like ```json\n{...}\n```"
+  [text]
+  (when (and text (string? text))
+    (if-let [match (re-find #"(?s)```json\s*\n(.*?)\n```" text)]
+      (try (json/parse-string (second match) true)
+           (catch Exception _
+             ;; If JSON parsing fails, return original text
+             text))
+      ;; If no code block pattern found, return original text
+      text)))
+
 (defn extract-content
   "Extract content from AI response using multiple possible paths"
   [response-body config]
   (let [parsed (json/parse-string response-body true)
         paths (or (:response-paths config) default-response-paths)
-        extracted-content (some #(get-in parsed %) paths)]
+        extracted-content (some #(get-in parsed %) paths)
+        ;; Try to unwrap JSON code blocks from the extracted content
+        unwrapped-content (unwrap-json-code-block extracted-content)]
     (when (:debug config)
       (println "\n=== DEBUG: Content Extraction ===")
       (println "Available response keys:" (keys parsed))
       (println "Trying paths:" paths)
       (println "Extracted content:" (pr-str extracted-content))
+      (when (not= extracted-content unwrapped-content)
+        (println "Unwrapped JSON code block:" (pr-str unwrapped-content)))
+      (println "Final content:" (pr-str unwrapped-content))
       (println "================================\n"))
-    extracted-content))
+    unwrapped-content))
 
 (defn call-ai-model
   "Core function to call AI model with a simple prompt string"
