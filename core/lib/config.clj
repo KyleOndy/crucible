@@ -50,6 +50,14 @@
                      ; built-in)
         :prompt-file nil, ; Path to external prompt file (alternative to
                           ; :prompt)
+        ;; Response parsing paths - customize for different AI providers
+        :response-paths [[:choices 0 :message :content] ; OpenAI/OpenRouter
+                         [:context 0 :text] ; Alternative format
+                         [:data :text] ; Generic format
+                         [:response :content] ; Another generic
+                         [:message :content] ; Simple message
+                         [:text] ; Direct text
+                         [:content]], ; Direct content
         ;; Message template for API requests - customize roles and content
         ;; as needed. Available variables: {prompt}, {title},
         ;; {description},
@@ -57,7 +65,7 @@
         :message-template [{:role "assistant", :content "{prompt}"}
                            {:role "user",
                             :content
-                            "Title: {title}\nDescription: {description}"}]},
+                              "Title: {title}\nDescription: {description}"}]},
    :workspace {:root-dir "workspace",
                :logs-dir "logs",
                :tickets-dir "tickets",
@@ -97,7 +105,7 @@
   (when path
     (when-not (string? path)
       (throw (ex-info "Path must be a string"
-                      {:type :invalid-input :value path})))
+                      {:type :invalid-input, :value path})))
     (if (str/starts-with? path "~")
       (str (System/getProperty "user.home") (subs path 1))
       path)))
@@ -138,29 +146,29 @@
   [error-context]
   (let [{:keys [pass-path stderr]} error-context]
     (cond (str/includes? stderr "is not in the password store")
-          (str "\n"
-               (str "ERROR: Password entry not found: " pass-path)
-               "\n\n"
-               "The entry '" pass-path
-               "' does not exist in your password store.\n\n"
-               "To check available entries:\n"
-               "  pass ls\n\n" "To add this entry:\n"
-               "  pass insert " pass-path
-               "\n\n" "Or update your config to use a different entry.")
+            (str "\n"
+                 (str "ERROR: Password entry not found: " pass-path)
+                 "\n\n"
+                 "The entry '" pass-path
+                 "' does not exist in your password store.\n\n"
+                   "To check available entries:\n"
+                 "  pass ls\n\n" "To add this entry:\n"
+                 "  pass insert " pass-path
+                 "\n\n" "Or update your config to use a different entry.")
           (str/includes? stderr "gpg: decryption failed")
-          (str "\n"
-               "ERROR: GPG decryption failed" "\n\n"
-               "Could not decrypt the password entry.\n" "Possible causes:\n"
-               "  • GPG key not available or expired\n"
-               "  • GPG agent not running\n"
-               "  • Wrong GPG key used\n\n" "Try:\n"
-               "  gpg --list-secret-keys\n"
-               "  gpgconf --kill gpg-agent && gpgconf --launch gpg-agent")
+            (str "\n"
+                 "ERROR: GPG decryption failed" "\n\n"
+                 "Could not decrypt the password entry.\n" "Possible causes:\n"
+                 "  • GPG key not available or expired\n"
+                   "  • GPG agent not running\n"
+                 "  • Wrong GPG key used\n\n" "Try:\n"
+                 "  gpg --list-secret-keys\n"
+                   "  gpgconf --kill gpg-agent && gpgconf --launch gpg-agent")
           (str/includes? stderr "not initialized")
-          (str "\n" "ERROR: Password store not initialized"
-               "\n\n" "Your password store has not been initialized.\n\n"
-               "To initialize:\n" "  pass init <your-gpg-id>\n\n"
-               "To find your GPG ID:\n" "  gpg --list-secret-keys")
+            (str "\n" "ERROR: Password store not initialized"
+                 "\n\n" "Your password store has not been initialized.\n\n"
+                 "To initialize:\n" "  pass init <your-gpg-id>\n\n"
+                 "To find your GPG ID:\n" "  gpg --list-secret-keys")
           :else (str "\n"
                      (str "ERROR: Failed to retrieve password from pass: "
                           pass-path)
@@ -187,38 +195,38 @@
             ;; Handle pass execution errors
             (let [error-context (get pass-result :context {})
                   formatted-message
-                  (case (:error pass-result)
-                    :pass-command-failed (format-pass-error-message
-                                          error-context)
-                    :pass-execution-failed
-                    (str "\n"
-                         "ERROR: Unexpected error using pass"
-                         "\n\n"
-                         "Failed to retrieve: "
-                         pass-path
-                         "\n"
-                         "Error: "
-                         (get error-context :exception "Unknown error"))
+                    (case (:error pass-result)
+                      :pass-command-failed (format-pass-error-message
+                                             error-context)
+                      :pass-execution-failed
+                        (str "\n"
+                             "ERROR: Unexpected error using pass"
+                             "\n\n"
+                             "Failed to retrieve: "
+                             pass-path
+                             "\n"
+                             "Error: "
+                             (get error-context :exception "Unknown error"))
                       ;; Default fallback
-                    (str "Failed to retrieve password from: " pass-path))]
+                      (str "Failed to retrieve password from: " pass-path))]
               (throw (ex-info formatted-message
                               (merge error-context {:pass-path pass-path}))))))
         ;; Handle availability check errors
         (let
-         [error-message
-          (case (:error availability-check)
-            :pass-not-installed
-            (str
-             "\nERROR: 'pass' command not found\n\n"
-             "The password manager 'pass' is not installed or not in PATH.\n"
-             "Please install it first:\n"
-             "  • macOS:  brew install pass\n"
-             "  • Linux:  apt install pass  (or your distro's package manager)\n"
-             "  • Then:   pass init <your-gpg-id>\n\n"
-             "Learn more: https://www.passwordstore.org/")
+          [error-message
+             (case (:error availability-check)
+               :pass-not-installed
+                 (str
+                   "\nERROR: 'pass' command not found\n\n"
+                   "The password manager 'pass' is not installed or not in PATH.\n"
+                     "Please install it first:\n"
+                   "  • macOS:  brew install pass\n"
+                     "  • Linux:  apt install pass  (or your distro's package manager)\n"
+                   "  • Then:   pass init <your-gpg-id>\n\n"
+                     "Learn more: https://www.passwordstore.org/")
                ;; Default fallback
-            (str "Failed to check pass command availability: "
-                 (get availability-check :message "Unknown error")))]
+               (str "Failed to check pass command availability: "
+                    (get availability-check :message "Unknown error")))]
           (throw (ex-info error-message
                           {:pass-path pass-path,
                            :error-type (:error availability-check)})))))
@@ -228,7 +236,7 @@
   "Recursively resolve all pass: references in the config"
   [config]
   (cond (map? config)
-        (into {} (map (fn [[k v]] [k (resolve-pass-references v)]) config))
+          (into {} (map (fn [[k v]] [k (resolve-pass-references v)]) config))
         (string? config) (resolve-pass-value config)
         :else config))
 
@@ -292,17 +300,12 @@
   (when prompt-file-path
     (cond
       ;; Absolute path - use as-is
-      (str/starts-with? prompt-file-path "/")
-      prompt-file-path
-
+      (str/starts-with? prompt-file-path "/") prompt-file-path
       ;; Home directory path - expand ~
-      (str/starts-with? prompt-file-path "~")
-      (expand-path prompt-file-path)
-
+      (str/starts-with? prompt-file-path "~") (expand-path prompt-file-path)
       ;; Relative path - resolve against prompts-dir
-      :else
-      (str (fs/path (get-in config [:workspace :prompts-dir])
-                    prompt-file-path)))))
+      :else (str (fs/path (get-in config [:workspace :prompts-dir])
+                          prompt-file-path)))))
 
 (defn load-prompt-file
   "Load prompt text from external file using decomposed I/O functions"
@@ -316,13 +319,13 @@
           content
           ;; File doesn't exist
           (throw (ex-info (str "Prompt file not found: " resolved-path)
-                          {:path resolved-path
+                          {:path resolved-path,
                            :original-path prompt-file-path})))
         ;; Handle read errors
         (let [error-context (:context read-result)]
           (throw (ex-info (str "Failed to read prompt file: " resolved-path)
-                          {:path resolved-path
-                           :original-path prompt-file-path
+                          {:path resolved-path,
+                           :original-path prompt-file-path,
                            :error (:exception error-context)})))))))
 
 (defn load-home-config
@@ -373,12 +376,10 @@
   (let [root-dir (expand-path (get-in config [:workspace :root-dir]))]
     (-> config
         (assoc-in [:workspace :root-dir] root-dir)
-        (update-in [:workspace :logs-dir]
-                   #(when % (str (fs/path root-dir %))))
+        (update-in [:workspace :logs-dir] #(when % (str (fs/path root-dir %))))
         (update-in [:workspace :tickets-dir]
                    #(when % (str (fs/path root-dir %))))
-        (update-in [:workspace :docs-dir]
-                   #(when % (str (fs/path root-dir %))))
+        (update-in [:workspace :docs-dir] #(when % (str (fs/path root-dir %))))
         (update-in [:workspace :prompts-dir]
                    #(when % (str (fs/path root-dir %)))))))
 
@@ -395,15 +396,16 @@
         legacy-name-pattern (:sprint-name-pattern jira-config)
         ;; Create normalized sprint config (new format takes precedence)
         normalized-sprint
-        (-> sprint-config
-            ;; Use legacy values as defaults if new config doesn't specify them
-            (update :enabled #(if (nil? %) (boolean legacy-auto-add) %))
-            (update :debug #(if (nil? %) (boolean legacy-debug) %))
-            (update :auto-add-to-ticket
-                    #(if (nil? %) (boolean legacy-auto-add) %))
-            (update :fallback-board-ids
-                    #(if (empty? %) (or legacy-fallback-boards []) %))
-            (update :name-pattern #(if (nil? %) legacy-name-pattern %)))]
+          (-> sprint-config
+              ;; Use legacy values as defaults if new config doesn't
+              ;; specify them
+              (update :enabled #(if (nil? %) (boolean legacy-auto-add) %))
+              (update :debug #(if (nil? %) (boolean legacy-debug) %))
+              (update :auto-add-to-ticket
+                      #(if (nil? %) (boolean legacy-auto-add) %))
+              (update :fallback-board-ids
+                      #(if (empty? %) (or legacy-fallback-boards []) %))
+              (update :name-pattern #(if (nil? %) legacy-name-pattern %)))]
     ;; Return config with normalized sprint section
     (assoc config :sprint normalized-sprint)))
 
@@ -416,16 +418,15 @@
       (cond
         ;; Load from external file (prompt-file takes precedence)
         (and prompt-file (not (str/blank? prompt-file)))
-        (try (let [loaded-prompt (load-prompt-file prompt-file config)]
-               (-> config
-                   (assoc-in [:ai :prompt] loaded-prompt)
-                   (assoc-in [:ai :prompt-file] prompt-file))) ; Keep file
-                                                                 ; path for
-                                                                 ; debugging
-             (catch Exception e
-               (throw (ex-info (str "Error loading prompt file: "
-                                    (.getMessage e))
-                               {:prompt-file prompt-file, :cause e}))))
+          (try (let [loaded-prompt (load-prompt-file prompt-file config)]
+                 (-> config
+                     (assoc-in [:ai :prompt] loaded-prompt)
+                     (assoc-in [:ai :prompt-file] prompt-file))) ; Keep file
+               ; path for debugging
+               (catch Exception e
+                 (throw (ex-info (str "Error loading prompt file: "
+                                      (.getMessage e))
+                                 {:prompt-file prompt-file, :cause e}))))
         ;; Use configured prompt or default
         prompt config
         ;; Neither prompt nor prompt-file configured - use default
@@ -447,15 +448,19 @@
 (defn validate-jira-config
   "Validate that required Jira configuration is present"
   [config]
-  (let [jira-config (:jira config)
-        errors
-        (cond-> []
-          (not (:base-url jira-config))
-          (conj "Missing Jira base URL (set in config file or CRUCIBLE_JIRA_URL)")
-          (not (:username jira-config))
-          (conj "Missing Jira username (set in config file or CRUCIBLE_JIRA_USER)")
-          (not (:api-token jira-config))
-          (conj "Missing Jira API token (set in config file or CRUCIBLE_JIRA_TOKEN)"))]
+  (let
+    [jira-config (:jira config)
+     errors
+       (cond-> []
+         (not (:base-url jira-config))
+           (conj
+             "Missing Jira base URL (set in config file or CRUCIBLE_JIRA_URL)")
+         (not (:username jira-config))
+           (conj
+             "Missing Jira username (set in config file or CRUCIBLE_JIRA_USER)")
+         (not (:api-token jira-config))
+           (conj
+             "Missing Jira API token (set in config file or CRUCIBLE_JIRA_TOKEN)"))]
     (when (seq errors) errors)))
 
 (defn config-locations
@@ -463,7 +468,7 @@
   []
   (str "Configuration is loaded from (in order of precedence):\n"
        "  1. ./crucible.edn (project-specific)\n"
-       "  2. ~/.config/crucible/config.edn (user config)\n"
+         "  2. ~/.config/crucible/config.edn (user config)\n"
        "  3. Environment variables (CRUCIBLE_*)\n" "  4. Built-in defaults"))
 
 (defn get-config-file-status
@@ -494,7 +499,7 @@
                                     (if (str/includes? var "TOKEN")
                                       "*****" ; Hide sensitive values
                                       val))}])
-               env-vars))))
+            env-vars))))
 
 (defn ensure-single-directory
   "I/O function to ensure a single directory exists with structured result"
@@ -516,17 +521,17 @@
                        operation-result (directory-operations-fn dir-path)]
                    (if (:success operation-result)
                      (assoc results
-                            dir-key (merge (:result operation-result)
-                                           {:description description}))
+                       dir-key (merge (:result operation-result)
+                                      {:description description}))
                      (assoc results
-                            dir-key {:created false,
-                                     :exists false,
-                                     :path dir-path,
-                                     :description description,
-                                     :error (get-in operation-result
-                                                    [:context :exception]
-                                                    "Unknown error")}))))
-               {})))
+                       dir-key {:created false,
+                                :exists false,
+                                :path dir-path,
+                                :description description,
+                                :error (get-in operation-result
+                                               [:context :exception]
+                                               "Unknown error")}))))
+         {})))
 
 (defn ensure-workspace-directories
   "Create missing workspace directories using decomposed I/O functions"
@@ -551,7 +556,8 @@
                      [:docs-dir "Documentation directory"]]
         missing (->> directories
                      (filter (fn [[dir-key _]]
-                               (not (fs/exists? (get workspace-config dir-key))))))]
+                               (not (fs/exists? (get workspace-config
+                                                     dir-key))))))]
     {:total-dirs (count directories),
      :missing-dirs (count missing),
      :missing-list (->> missing
@@ -587,10 +593,10 @@
   [text color]
   (when-not (string? text)
     (throw (ex-info "Text must be a string"
-                    {:type :invalid-input :value text})))
+                    {:type :invalid-input, :value text})))
   (when-not (keyword? color)
     (throw (ex-info "Color must be a keyword"
-                    {:type :invalid-input :value color})))
+                    {:type :invalid-input, :value color})))
   (if (terminal-supports-color?)
     (str (get color-codes color "") text (get color-codes :reset ""))
     text))
@@ -631,7 +637,7 @@
   (when (get-in config [section :debug] false)
     (let [timestamp (.format (java.time.LocalDateTime/now)
                              (java.time.format.DateTimeFormatter/ofPattern
-                              "yyyy-MM-dd HH:mm:ss"))
+                               "yyyy-MM-dd HH:mm:ss"))
           section-name (str/upper-case (name section))]
       (binding [*out* *err*]
         (println (str "[" timestamp "] [" section-name "-DEBUG] " message))))))

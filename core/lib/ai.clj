@@ -9,24 +9,25 @@
   [template vars]
   (when-not (string? template)
     (throw (ex-info "Template must be a string"
-                    {:type :invalid-input :value template})))
+                    {:type :invalid-input, :value template})))
   (when-not (map? vars)
     (throw (ex-info "Variables must be a map"
-                    {:type :invalid-input :value vars})))
-  (->> vars
-       (reduce (fn [text [var-name var-value]]
-                 (str/replace text (str "{" (name var-name) "}") (str var-value)))
-               template)))
+                    {:type :invalid-input, :value vars})))
+  (->>
+    vars
+    (reduce (fn [text [var-name var-value]]
+              (str/replace text (str "{" (name var-name) "}") (str var-value)))
+      template)))
 
 (defn build-messages-from-template
   "Build messages array from configurable template"
   [template vars]
   (when-not (sequential? template)
     (throw (ex-info "Template must be a sequence"
-                    {:type :invalid-input :value template})))
+                    {:type :invalid-input, :value template})))
   (when-not (map? vars)
     (throw (ex-info "Variables must be a map"
-                    {:type :invalid-input :value vars})))
+                    {:type :invalid-input, :value vars})))
   (->> template
        (mapv (fn [msg-template]
                (-> msg-template
@@ -37,10 +38,10 @@
   [{:keys [title description]} ai-config]
   (when-not (and title (string? title))
     (throw (ex-info "Title must be a non-empty string"
-                    {:type :invalid-input :value title})))
+                    {:type :invalid-input, :value title})))
   (when-not (map? ai-config)
     (throw (ex-info "AI config must be a map"
-                    {:type :invalid-input :value ai-config})))
+                    {:type :invalid-input, :value ai-config})))
   (let [vars {:prompt (:prompt ai-config "You are helpful"),
               :title title,
               :description (or description ""),
@@ -57,26 +58,47 @@
   [ai-config]
   (when-not (map? ai-config)
     (throw (ex-info "AI config must be a map"
-                    {:type :invalid-input :value ai-config})))
+                    {:type :invalid-input, :value ai-config})))
   (let [base {"Authorization" (str "Bearer " (:api-key ai-config)),
               "Content-Type" "application/json",
               "User-Agent"
-              "Crucible/1.0 (+https://github.com/KyleOndy/crucible)"}]
+                "Crucible/1.0 (+https://github.com/KyleOndy/crucible)"}]
     (if (str/includes? (:gateway-url ai-config) "openrouter.ai")
       (merge base
              {"HTTP-Referer" "crucible-cli",
               "X-Title" "Crucible Development Tool"})
       base)))
 
+(defn extract-content
+  "Extract content from AI response using multiple possible paths"
+  [response-body config]
+  (let [parsed (json/parse-string response-body true)
+        paths (or (:response-paths config)
+                  [[:choices 0 :message :content] ; OpenAI/OpenRouter
+                   [:context 0 :text] ; Alternative format
+                   [:data :text] ; Generic format
+                   [:response :content] ; Another generic format
+                   [:message :content] ; Simple message format
+                   [:text] ; Direct text
+                   [:content]]) ; Direct content
+        extracted-content (some #(get-in parsed %) paths)]
+    (when (:debug config)
+      (println "\n=== DEBUG: Content Extraction ===")
+      (println "Available response keys:" (keys parsed))
+      (println "Trying paths:" paths)
+      (println "Extracted content:" (pr-str extracted-content))
+      (println "================================\n"))
+    extracted-content))
+
 (defn call-ai-model
   "Core function to call AI model with a simple prompt string"
   [prompt ai-config]
   (when-not (and prompt (string? prompt))
     (throw (ex-info "Prompt must be a non-empty string"
-                    {:type :invalid-input :value prompt})))
+                    {:type :invalid-input, :value prompt})))
   (when-not (map? ai-config)
     (throw (ex-info "AI config must be a map"
-                    {:type :invalid-input :value ai-config})))
+                    {:type :invalid-input, :value ai-config})))
   (try
     (let [messages [{:role "user", :content prompt}]
           request-body {:model (:model ai-config "gpt-4"),
@@ -102,15 +124,16 @@
                 (if (= k "Authorization")
                   (println (str "  " k
                                 ": "
-                                (if (str/blank? v) "[EMPTY]" "[REDACTED]")))
+                                  (if (str/blank? v) "[EMPTY]" "[REDACTED]")))
                   (println (str "  " k ": " v))))
               (println "\n--- Request Body (JSON) ---")
-              (try
-                (let [pretty-json (json/generate-string request-body {:pretty true})]
-                  (println pretty-json))
-                (catch Exception e
-                  (println (str "Failed to pretty-print JSON: " (.getMessage e)))
-                  (println json-string)))
+              (try (let [pretty-json (json/generate-string request-body
+                                                           {:pretty true})]
+                     (println pretty-json))
+                   (catch Exception e
+                     (println (str "Failed to pretty-print JSON: "
+                                   (.getMessage e)))
+                     (println json-string)))
               (println (str "\nJSON byte length: "
                             (count (.getBytes json-string "UTF-8"))
                             " bytes"))
@@ -126,14 +149,14 @@
               (println (str "Response timestamp: " (java.time.Instant/now)))
               (println (str "Status: " (:status response)))
               (println "\n--- Response Headers ---")
-              (doseq [[k v] (:headers response)]
-                (println (str "  " k ": " v)))
+              (doseq [[k v] (:headers response)] (println (str "  " k ": " v)))
               (println "\n--- Response Body ---")
               (if-let [body (:body response)]
                 (try
                   ;; Try to pretty-print JSON response
                   (let [parsed-body (json/parse-string body true)
-                        pretty-body (json/generate-string parsed-body {:pretty true})]
+                        pretty-body (json/generate-string parsed-body
+                                                          {:pretty true})]
                     (println pretty-body))
                   (catch Exception _
                     ;; If not JSON, just print raw body
@@ -141,36 +164,38 @@
                 (println "[No response body]"))
               (println "==========================\n"))]
       ;; Return structured response using cond-> for cleaner flow
-      (cond-> {:status (:status response)
-               :body (:body response)}
+      (cond-> {:status (:status response), :body (:body response)}
         (= 200 (:status response))
-        (assoc :success true
-               :response (json/parse-string (:body response) true)
-               :content (get-in (json/parse-string (:body response) true)
-                                [:choices 0 :message :content]))
-        (= 400 (:status response))
-        (assoc :success false
-               :error :bad-request
-               :message "Bad request - invalid JSON or parameters"
-               :details (:body response))
-        (= 401 (:status response))
-        (assoc :success false
-               :error :unauthorized
-               :message "Authentication failed - check API key"
-               :details (:body response))
-        (= 429 (:status response))
-        (assoc :success false
-               :error :rate-limited
-               :message "Rate limited by AI gateway"
-               :details (:body response))
+          (assoc :success
+            true :response
+            (json/parse-string (:body response) true) :content
+            (extract-content (:body response) ai-config))
+        (= 400 (:status response)) (assoc :success
+                                     false :error
+                                     :bad-request :message
+                                     "Bad request - invalid JSON or parameters"
+                                       :details
+                                     (:body response))
+        (= 401 (:status response)) (assoc :success
+                                     false :error
+                                     :unauthorized :message
+                                     "Authentication failed - check API key"
+                                       :details
+                                     (:body response))
+        (= 429 (:status response)) (assoc :success
+                                     false :error
+                                     :rate-limited :message
+                                     "Rate limited by AI gateway" :details
+                                     (:body response))
         (and (not= 200 (:status response))
              (not= 400 (:status response))
              (not= 401 (:status response))
              (not= 429 (:status response)))
-        (assoc :success false
-               :error :api-error
-               :message (str "AI gateway returned " (:status response))
-               :details (:body response))))
+          (assoc :success
+            false :error
+            :api-error :message
+            (str "AI gateway returned " (:status response)) :details
+            (:body response))))
     (catch java.net.SocketTimeoutException _
       {:success false, :error :timeout, :message "AI gateway timeout"})
     (catch Exception e
@@ -184,16 +209,16 @@
   [{:keys [title description]} ai-config]
   (when-not (and title (string? title))
     (throw (ex-info "Title must be a non-empty string"
-                    {:type :invalid-input :value title})))
+                    {:type :invalid-input, :value title})))
   (when-not (map? ai-config)
     (throw (ex-info "AI config must be a map"
-                    {:type :invalid-input :value ai-config})))
+                    {:type :invalid-input, :value ai-config})))
   (println "Enhancing content with AI...")
   ;; Build Jira-specific prompt from title and description
   (let [vars {:prompt
-              (:prompt
-               ai-config
-               "Enhance this Jira ticket for clarity and professionalism."),
+                (:prompt
+                  ai-config
+                  "Enhance this Jira ticket for clarity and professionalism."),
               :title title,
               :description (or description ""),
               :title_and_description (str "Title: "
@@ -210,12 +235,14 @@
                      :content (str (:prompt vars)
                                    "\n\n"
                                    (:title_and_description vars))}])
-        ;; Create a simple prompt string from the messages (take the last user message)
-        prompt (->> messages
-                    (filter #(= "user" (:role %)))
-                    last
-                    :content
-                    (or (str (:prompt vars) "\n\n" (:title_and_description vars))))
+        ;; Create a simple prompt string from the messages (take the last
+        ;; user message)
+        prompt (->>
+                 messages
+                 (filter #(= "user" (:role %)))
+                 last
+                 :content
+                 (or (str (:prompt vars) "\n\n" (:title_and_description vars))))
         ;; Call the core AI function
         result (call-ai-model prompt ai-config)]
     (if (:success result)
@@ -226,48 +253,51 @@
                 (println (str "Raw AI content: " (pr-str content-text)))
                 (println "Attempting to parse response..."))
             enhanced
-            (if content-text
+              (if content-text
                 ;; Try to parse JSON response for structured enhancement
-              (try (let [parsed-content (json/parse-string content-text true)
-                         _ (when (:debug ai-config)
-                             (println "Successfully parsed as JSON:")
-                             (println (json/generate-string parsed-content {:pretty true})))]
-                     {:title (or (:title parsed-content)
-                                 (:enhanced_title parsed-content)
-                                 title),
-                      :description (or (:description parsed-content)
-                                       (:enhanced_description parsed-content)
-                                       description)})
-                   (catch Exception e
-                     (when (:debug ai-config)
-                       (println (str "JSON parsing failed: " (.getMessage e)))
-                       (println "Using content as enhanced description"))
-                       ;; If parsing fails, use the content as enhanced description
-                     {:title title,
-                      :description (or content-text description)}))
+                (try (let [parsed-content (json/parse-string content-text true)
+                           _ (when (:debug ai-config)
+                               (println "Successfully parsed as JSON:")
+                               (println (json/generate-string parsed-content
+                                                              {:pretty true})))]
+                       {:title (or (:title parsed-content)
+                                   (:enhanced_title parsed-content)
+                                   title),
+                        :description (or (:description parsed-content)
+                                         (:enhanced_description parsed-content)
+                                         description)})
+                     (catch Exception e
+                       (when (:debug ai-config)
+                         (println (str "JSON parsing failed: " (.getMessage e)))
+                         (println "Using content as enhanced description"))
+                       ;; If parsing fails, use the content as enhanced
+                       ;; description
+                       {:title title,
+                        :description (or content-text description)}))
                 ;; Fallback to original content if no content found
-              (do
-                (when (:debug ai-config)
-                  (println "No content received from AI - using original"))
-                {:title title, :description description}))
+                (do (when (:debug ai-config)
+                      (println "No content received from AI - using original"))
+                    {:title title, :description description}))
             _ (when (:debug ai-config)
                 (println "\n--- Final Enhancement Result ---")
                 (println (str "Original title: " (pr-str title)))
                 (println (str "Enhanced title: " (pr-str (:title enhanced))))
                 (println (str "Title changed: " (not= title (:title enhanced))))
                 (println (str "Original description: " (pr-str description)))
-                (println (str "Enhanced description: " (pr-str (:description enhanced))))
-                (println (str "Description changed: " (not= description (:description enhanced))))
+                (println (str "Enhanced description: "
+                              (pr-str (:description enhanced))))
+                (println (str "Description changed: "
+                              (not= description (:description enhanced))))
                 (println "===============================\n"))]
         enhanced)
       ;; Handle errors - print error and return original content
       (do (case (:error result)
             :unauthorized
-            (println
-             "AI authentication failed - check your API key configuration")
+              (println
+                "AI authentication failed - check your API key configuration")
             :timeout (println "AI gateway timeout, using original content")
             :rate-limited (println
-                           "AI gateway rate limited, using original content")
+                            "AI gateway rate limited, using original content")
             (println (:message result)))
           (when (:debug ai-config)
             (println "\n=== DEBUG: AI Error - Using Original Content ===")
@@ -281,7 +311,7 @@
   [ai-config]
   (when-not (map? ai-config)
     (throw (ex-info "AI config must be a map"
-                    {:type :invalid-input :value ai-config})))
+                    {:type :invalid-input, :value ai-config})))
   (try
     ;; Use a minimal test request to the actual endpoint
     (let [test-messages [{:role "user", :content "test"}]
@@ -310,21 +340,21 @@
       {:success (= 200 (:status response)),
        :status (:status response),
        :message
-       (cond (= 200 (:status response)) "Gateway is accessible and working"
-             (= 400 (:status response)) (str "Bad request (400): "
-                                             (:body response))
-             (= 401 (:status response))
-             "Authentication failed (401) - check API key"
-             (= 403 (:status response))
-             "Access forbidden (403) - check permissions"
-             (= 404 (:status response))
-             "Endpoint not found (404) - check gateway URL"
-             (= 429 (:status response))
-             "Rate limited (429) - gateway is accessible but rate limited"
-             :else (str "Gateway error: "
-                        (:status response)
-                        (when (:body response)
-                          (str " - " (:body response)))))})
+         (cond (= 200 (:status response)) "Gateway is accessible and working"
+               (= 400 (:status response)) (str "Bad request (400): "
+                                               (:body response))
+               (= 401 (:status response))
+                 "Authentication failed (401) - check API key"
+               (= 403 (:status response))
+                 "Access forbidden (403) - check permissions"
+               (= 404 (:status response))
+                 "Endpoint not found (404) - check gateway URL"
+               (= 429 (:status response))
+                 "Rate limited (429) - gateway is accessible but rate limited"
+               :else (str "Gateway error: "
+                          (:status response)
+                          (when (:body response)
+                            (str " - " (:body response)))))})
     (catch Exception e
       (when (:debug ai-config)
         (println "\n=== DEBUG: Gateway Test Exception ===")
@@ -337,34 +367,30 @@
 
 (defn show-enhanced-content
   "Show enhanced content with appropriate formatting based on mode"
-  ([original enhanced]
-   (show-enhanced-content original enhanced false))
+  ([original enhanced] (show-enhanced-content original enhanced false))
   ([original enhanced ai-only-mode?]
    (when-not (map? original)
      (throw (ex-info "Original content must be a map"
-                     {:type :invalid-input :value original})))
+                     {:type :invalid-input, :value original})))
    (when-not (map? enhanced)
      (throw (ex-info "Enhanced content must be a map"
-                     {:type :invalid-input :value enhanced})))
+                     {:type :invalid-input, :value enhanced})))
    (when (not= original enhanced)
      (println "\n=== AI Enhancement Results ===")
      (if ai-only-mode?
        ;; Clean output for --ai-only mode - just show the enhanced content
-       (do
-         (when (:title enhanced)
-           (println (str "Title: " (:title enhanced))))
-         (when (:description enhanced)
-           (println (str "Description: " (:description enhanced)))))
+       (do (when (:title enhanced) (println (str "Title: " (:title enhanced))))
+           (when (:description enhanced)
+             (println (str "Description: " (:description enhanced)))))
        ;; Before/after comparison for regular enhancement mode
-       (do
-         (when (not= (:title original) (:title enhanced))
-           (println "Title:")
-           (println (str "  Before: " (:title original)))
-           (println (str "  After:  " (:title enhanced))))
-         (when (not= (:description original) (:description enhanced))
-           (println "Description:")
-           (println (str "  Before: "
-                         (str/replace (:description original) "\n" "\\n")))
-           (println (str "  After:  "
-                         (str/replace (:description enhanced) "\n" "\\n"))))))
+       (do (when (not= (:title original) (:title enhanced))
+             (println "Title:")
+             (println (str "  Before: " (:title original)))
+             (println (str "  After:  " (:title enhanced))))
+           (when (not= (:description original) (:description enhanced))
+             (println "Description:")
+             (println (str "  Before: "
+                           (str/replace (:description original) "\n" "\\n")))
+             (println (str "  After:  "
+                           (str/replace (:description enhanced) "\n" "\\n"))))))
      (println "==============================\n"))))

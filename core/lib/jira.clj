@@ -54,8 +54,7 @@
   "Create ADF paragraph node from text"
   [text]
   (when-not (str/blank? text)
-    {:type "paragraph"
-     :content (adf/parse-inline-formatting text)}))
+    {:type "paragraph", :content (adf/parse-inline-formatting text)}))
 
 ;; Remove old ADF functions - use lib.adf instead
 

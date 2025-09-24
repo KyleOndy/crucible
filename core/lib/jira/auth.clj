@@ -9,8 +9,7 @@
   [username api-token]
   (when (or (str/blank? username) (str/blank? api-token))
     (throw (ex-info "Username and API token are required"
-                    {:username username :api-token (some? api-token)})))
-
+                    {:username username, :api-token (some? api-token)})))
   (->> (str username ":" api-token)
        (.getBytes)
        (.encodeToString (java.util.Base64/getEncoder))
@@ -20,13 +19,15 @@
   "Generate formatted timestamp for debug logging"
   []
   (.format (java.time.LocalDateTime/now)
-           (java.time.format.DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss")))
+           (java.time.format.DateTimeFormatter/ofPattern
+             "yyyy-MM-dd HH:mm:ss")))
 
 (defn- debug-log
   "Helper function for debug logging with timestamp"
   [& messages]
   (binding [*out* *err*]
-    (println (str "[" (log-timestamp) "] [JIRA-DEBUG] " (str/join " " messages)))))
+    (println (str "[" (log-timestamp)
+                  "] [JIRA-DEBUG] " (str/join " " messages)))))
 
 (defn- log-request-debug
   "Log outgoing request details"
@@ -34,8 +35,7 @@
   (debug-log "HTTP" (str/upper-case (name method)) url)
   (when-let [query-params (:query-params request-opts)]
     (debug-log "Query params:" query-params))
-  (when-let [body (:body request-opts)]
-    (debug-log "Request body:" body)))
+  (when-let [body (:body request-opts)] (debug-log "Request body:" body)))
 
 (defn- log-response-debug
   "Log response details"
@@ -46,8 +46,7 @@
       (do (debug-log "Response body keys:" (keys body))
           (when (:issues body)
             (debug-log "Issues count:" (count (:issues body))))
-          (when (< (count (str body)) 1000)
-            (debug-log "Response body:" body)))
+          (when (< (count (str body)) 1000) (debug-log "Response body:" body)))
       (debug-log "Response body:" body))))
 
 (defn jira-request
@@ -61,18 +60,15 @@
                                 "Content-Type" "application/json"},
                       :throw false}
         request-opts (merge default-opts opts)]
-
     (when debug (log-request-debug method url request-opts))
-
     (let [response (case method
                      :get (http/get url request-opts)
                      :post (http/post url request-opts)
                      :put (http/put url request-opts)
                      :delete (http/delete url request-opts))
-          parsed-response (update response :body #(when % (json/parse-string % true)))]
-
+          parsed-response
+            (update response :body #(when % (json/parse-string % true)))]
       (when debug (log-response-debug response parsed-response))
-
       parsed-response)))
 
 (defn test-connection
@@ -80,18 +76,17 @@
   [jira-config]
   (let [response (jira-request jira-config :get "/myself")]
     (if (= 200 (:status response))
-      {:success true
+      {:success true,
        :message (str "Successfully connected as: "
                      (get-in response [:body :displayName]))}
-      {:success false
+      {:success false,
        :message (str "Connection failed: "
                      (or (get-in response [:body :message])
-                         (:reason-phrase response)))
+                         (:reason-phrase response))),
        :status (:status response)})))
 
 (defn get-user-info
   "Get current user information"
   [jira-config]
   (let [response (jira-request jira-config :get "/myself")]
-    (when (= 200 (:status response))
-      (:body response))))
+    (when (= 200 (:status response)) (:body response))))

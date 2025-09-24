@@ -148,7 +148,7 @@
             end (.end matcher)
             full-match (.group matcher)
             inner-text
-            (if (> (.groupCount matcher) 0) (.group matcher 1) full-match)
+              (if (> (.groupCount matcher) 0) (.group matcher 1) full-match)
             ;; For URLs, both text and href should be the same
             href (if (= type :url)
                    full-match
@@ -164,11 +164,11 @@
 
 (def ^:private formatting-patterns
   "Configuration map for markdown formatting patterns."
-  {:bold #"\*\*(.+?)\*\*"
-   :italic #"(?<!\*)\*([^*]+)\*(?!\*)"
-   :code #"`([^`]+)`"
-   :custom-link #"\[([^\]]+)\]\(([^)]+)\)"
-   :url #"https?://[^\s]+"
+  {:bold #"\*\*(.+?)\*\*",
+   :italic #"(?<!\*)\*([^*]+)\*(?!\*)",
+   :code #"`([^`]+)`",
+   :custom-link #"\[([^\]]+)\]\(([^)]+)\)",
+   :url #"https?://[^\s]+",
    :strike #"~~([^~]+)~~"})
 
 (defn find-pattern-matches
@@ -188,8 +188,8 @@
             (if (or (empty? acc) (>= (:start match) (:end (last acc))))
               (conj acc match)
               acc))
-          []
-          matches))
+    []
+    matches))
 
 (defn extract-formatting-patterns
   "Extract all formatting patterns from text, sorted by position with overlaps removed."
@@ -235,16 +235,17 @@
     (if (str/blank? text) [] [(create-text-node text)])
     ;; Build content nodes using reduce for functional style
     (let [result-with-pos
-          (reduce
-           (fn [[nodes pos] match]
-             (let [;; Add text before match (if any)
-                   nodes-with-prefix (add-plain-text-if-needed nodes text pos (:start match))
-                   ;; Create formatted node
-                   formatted-node (create-formatted-node match)
-                   updated-nodes (conj nodes-with-prefix formatted-node)]
-               [updated-nodes (:end match)]))
-           [[] 0]
-           matches)
+            (reduce
+              (fn [[nodes pos] match]
+                (let [;; Add text before match (if any)
+                      nodes-with-prefix
+                        (add-plain-text-if-needed nodes text pos (:start match))
+                      ;; Create formatted node
+                      formatted-node (create-formatted-node match)
+                      updated-nodes (conj nodes-with-prefix formatted-node)]
+                  [updated-nodes (:end match)]))
+              [[] 0]
+              matches)
           [final-nodes final-pos] result-with-pos]
       ;; Add any remaining text
       (add-remaining-text-if-needed final-nodes text final-pos))))
@@ -266,104 +267,106 @@
   (when (seq lines)
     (let [;; Filter out separator lines (e.g., |---|---|)
           content-lines
-          (remove #(re-matches #"^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$"
-                               %)
-                  lines)
+            (remove #(re-matches #"^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$"
+                                 %)
+              lines)
           ;; Parse table rows
           parsed-rows
-          (map (fn [line-idx line]
-                 (let [;; Split by | and clean up cells
-                       raw-cells (str/split line #"\|")
+            (map (fn [line-idx line]
+                   (let [;; Split by | and clean up cells
+                         raw-cells (str/split line #"\|")
                          ;; Remove empty cells from start/end (due to
                          ;; leading/trailing |)
-                       cells (if (str/blank? (first raw-cells))
-                               (drop 1 raw-cells)
-                               raw-cells)
-                       cells (if (and (seq cells) (str/blank? (last cells)))
-                               (drop-last cells)
-                               cells)
+                         cells (if (str/blank? (first raw-cells))
+                                 (drop 1 raw-cells)
+                                 raw-cells)
+                         cells (if (and (seq cells) (str/blank? (last cells)))
+                                 (drop-last cells)
+                                 cells)
                          ;; Clean and parse cell content
-                       cleaned-cells (map (fn [cell]
-                                            (let [content (str/trim cell)]
-                                              (if (str/blank? content)
-                                                [(create-paragraph
-                                                  [(create-text-node "")])]
-                                                [(create-paragraph
-                                                  (parse-inline-formatting
-                                                   content))])))
-                                          cells)]
+                         cleaned-cells (map (fn [cell]
+                                              (let [content (str/trim cell)]
+                                                (if (str/blank? content)
+                                                  [(create-paragraph
+                                                     [(create-text-node "")])]
+                                                  [(create-paragraph
+                                                     (parse-inline-formatting
+                                                       content))])))
+                                         cells)]
                      ;; First row is headers, rest are data
-                   (if (= line-idx 0)
-                     (create-table-row (map #(create-table-header %)
-                                            cleaned-cells))
-                     (create-table-row (map #(create-table-cell %)
-                                            cleaned-cells)))))
-               (range)
-               content-lines)]
+                     (if (= line-idx 0)
+                       (create-table-row (map #(create-table-header %)
+                                           cleaned-cells))
+                       (create-table-row (map #(create-table-cell %)
+                                           cleaned-cells)))))
+              (range)
+              content-lines)]
       (when (seq parsed-rows) (create-table parsed-rows)))))
 
 (defn parse-nested-list
   "Parse nested list lines into proper ADF list structure."
   [lines list-type]
-  (letfn [(get-indent-level [line]
-            (count (take-while #(= % \space) line)))
-
-          (get-line-type [line]
-            (cond
-              (re-matches #"^\s*- .*" line) :bullet
-              (re-matches #"^\s*\d+\.\s.*" line) :ordered
-              :else :other))
-
-          (parse-item-content [line]
-            (let [trimmed (str/trim line)]
-              (cond
-                (re-matches #"^- .*" trimmed)
-                (str/trim (subs trimmed 1))
-
-                (re-matches #"^\d+\.\s.*" trimmed)
-                (str/trim (subs trimmed (inc (.indexOf trimmed ". "))))
-
-                :else trimmed)))
-
-          (build-nested-structure [items current-level]
-            (->> items
-                 (reduce (fn [{:keys [result remaining]} item]
-                           (let [level (:level item)
-                                 content (:content item)]
-                             (cond
-                              ;; Item at current level - add it
-                               (= level current-level)
-                               (let [nested-items (take-while #(> (:level %) current-level) remaining)
-                                     rest-items (drop-while #(> (:level %) current-level) remaining)
-                                     nested-list (when (seq nested-items)
-                                                   (let [nested-level (apply min (map :level nested-items))
-                                                         first-nested-type (:line-type (first nested-items))
-                                                         nested-list-type (if (= first-nested-type :ordered)
-                                                                            :ordered-list
-                                                                            :bullet-list)]
-                                                     (parse-nested-list (map :original nested-items) nested-list-type)))
-                                     list-item-content (if nested-list
-                                                         [(create-paragraph (parse-inline-formatting content)) nested-list]
-                                                         [(create-paragraph (parse-inline-formatting content))])]
-                                 {:result (conj result (create-list-item list-item-content))
-                                  :remaining rest-items})
-
-                              ;; Item at deeper level - skip
-                               (> level current-level)
-                               {:result result :remaining remaining}
-
-                              ;; Item at shallower level - return current result
-                               (< level current-level)
-                               (reduced {:result result :remaining (cons item remaining)}))))
-                         {:result [] :remaining items})
-                 :result))]
-
+  (letfn
+    [(get-indent-level [line] (count (take-while #(= % \space) line)))
+     (get-line-type [line]
+       (cond (re-matches #"^\s*- .*" line) :bullet
+             (re-matches #"^\s*\d+\.\s.*" line) :ordered
+             :else :other))
+     (parse-item-content [line]
+       (let [trimmed (str/trim line)]
+         (cond (re-matches #"^- .*" trimmed) (str/trim (subs trimmed 1))
+               (re-matches #"^\d+\.\s.*" trimmed)
+                 (str/trim (subs trimmed (inc (.indexOf trimmed ". "))))
+               :else trimmed)))
+     (build-nested-structure [items current-level]
+       (->>
+         items
+         (reduce
+           (fn [{:keys [result remaining]} item]
+             (let [level (:level item)
+                   content (:content item)]
+               (cond
+                 ;; Item at current level - add it
+                 (= level current-level)
+                   (let [nested-items (take-while #(> (:level %) current-level)
+                                                  remaining)
+                         rest-items (drop-while #(> (:level %) current-level)
+                                                remaining)
+                         nested-list
+                           (when (seq nested-items)
+                             (let [nested-level (apply min
+                                                  (map :level nested-items))
+                                   first-nested-type (:line-type
+                                                       (first nested-items))
+                                   nested-list-type (if (= first-nested-type
+                                                           :ordered)
+                                                      :ordered-list
+                                                      :bullet-list)]
+                               (parse-nested-list (map :original nested-items)
+                                                  nested-list-type)))
+                         list-item-content
+                           (if nested-list
+                             [(create-paragraph (parse-inline-formatting
+                                                  content)) nested-list]
+                             [(create-paragraph (parse-inline-formatting
+                                                  content))])]
+                     {:result (conj result
+                                    (create-list-item list-item-content)),
+                      :remaining rest-items})
+                 ;; Item at deeper level - skip
+                 (> level current-level) {:result result, :remaining remaining}
+                 ;; Item at shallower level - return current result
+                 (< level current-level) (reduced {:result result,
+                                                   :remaining
+                                                     (cons item remaining)}))))
+           {:result [], :remaining items})
+         :result))]
     (when (seq lines)
       (let [items (->> lines
                        (map (fn [line]
-                              {:level (get-indent-level line)
-                               :content (parse-item-content line)
-                               :original line
+                              {:level (get-indent-level line),
+                               :content (parse-item-content line),
+                               :original line,
                                :line-type (get-line-type line)})))
             nested-structure (build-nested-structure items 0)]
         (if (= list-type :bullet-list)
@@ -372,13 +375,13 @@
 
 (def ^:private line-patterns
   "Configuration for recognizing different types of markdown lines."
-  {:code-block-start #"^```"
-   :code-block-end #"^```"
-   :header #"^#+\s.*"
-   :bullet-list #"^\s*- .*"
-   :ordered-list #"^\s*\d+\.\s.*"
-   :blockquote #"^> .*"
-   :horizontal-rule #"^-{3,}$"
+  {:code-block-start #"^```",
+   :code-block-end #"^```",
+   :header #"^#+\s.*",
+   :bullet-list #"^\s*- .*",
+   :ordered-list #"^\s*\d+\.\s.*",
+   :blockquote #"^> .*",
+   :horizontal-rule #"^-{3,}$",
    :table-row #".*\|.*"})
 
 (defn- classify-line
@@ -390,122 +393,93 @@
     (cond
       ;; Handle code block transitions
       (and in-code-block? (re-find (:code-block-end line-patterns) line))
-      {:type :code-block-end}
-
-      in-code-block?
-      {:type :code-block-content :line line}
-
+        {:type :code-block-end}
+      in-code-block? {:type :code-block-content, :line line}
       (re-find (:code-block-start line-patterns) line)
-      {:type :code-block-start :language (str/trim (subs line 3))}
-
+        {:type :code-block-start, :language (str/trim (subs line 3))}
       ;; Other line types
-      (re-matches (:header line-patterns) line)
-      {:type :header :line line}
-
+      (re-matches (:header line-patterns) line) {:type :header, :line line}
       (re-matches (:bullet-list line-patterns) line)
-      {:type :bullet-list :line line :indent (count (take-while #(= % \space) line))}
-
+        {:type :bullet-list,
+         :line line,
+         :indent (count (take-while #(= % \space) line))}
       (re-matches (:ordered-list line-patterns) line)
-      {:type :ordered-list :line line :indent (count (take-while #(= % \space) line))}
-
-      (re-matches (:blockquote line-patterns) line)
-      {:type :blockquote :line line}
-
-      (re-matches (:horizontal-rule line-patterns) line)
-      {:type :rule}
-
+        {:type :ordered-list,
+         :line line,
+         :indent (count (take-while #(= % \space) line))}
+      (re-matches (:blockquote line-patterns) line) {:type :blockquote,
+                                                     :line line}
+      (re-matches (:horizontal-rule line-patterns) line) {:type :rule}
       (and (str/includes? line "|") (not (str/starts-with? line ">")))
-      {:type :table :line line}
-
-      (not (str/blank? line))
-      {:type :paragraph :line line}
-
-      :else
-      {:type :empty})))
+        {:type :table, :line line}
+      (not (str/blank? line)) {:type :paragraph, :line line}
+      :else {:type :empty})))
 
 (defn- group-consecutive-lines
   "Group consecutive lines of the same type together."
   [lines]
   (reduce
-   (fn [acc line]
-     (let [last-group (last acc)
-           classified (classify-line line last-group)]
-       (case (:type classified)
-         :code-block-end
-         (update acc (dec (count acc)) assoc :closed? true)
-
-         :code-block-content
-         (update acc (dec (count acc)) #(update % :lines conj (:line classified)))
-
-         :code-block-start
-         (conj acc {:type :code-block
-                    :language (when-not (str/blank? (:language classified))
-                                (:language classified))
-                    :lines []
-                    :closed? false})
-
-         :header
-         (conj acc {:type :header :line (:line classified)})
-
-         (:bullet-list :ordered-list)
-         (if (and last-group
-                  (or (= (:type last-group) :bullet-list)
-                      (= (:type last-group) :ordered-list))
-                  (or (> (:indent classified) 0)
-                      (= (:type last-group) (:type classified))))
-           (update acc (dec (count acc)) #(update % :lines conj (:line classified)))
-           (conj acc {:type (:type classified) :lines [(:line classified)]}))
-
-         (:blockquote :table)
-         (if (and last-group (= (:type last-group) (:type classified)))
-           (update acc (dec (count acc)) #(update % :lines conj (:line classified)))
-           (conj acc {:type (:type classified) :lines [(:line classified)]}))
-
-         :rule
-         (conj acc {:type :rule})
-
-         :paragraph
-         (conj acc {:type :paragraph :line (:line classified)})
-
-         :empty
-         acc)))
-   []
-   lines))
+    (fn [acc line]
+      (let [last-group (last acc)
+            classified (classify-line line last-group)]
+        (case (:type classified)
+          :code-block-end (update acc (dec (count acc)) assoc :closed? true)
+          :code-block-content (update
+                                acc
+                                (dec (count acc))
+                                #(update % :lines conj (:line classified)))
+          :code-block-start (conj acc
+                                  {:type :code-block,
+                                   :language (when-not (str/blank?
+                                                         (:language classified))
+                                               (:language classified)),
+                                   :lines [],
+                                   :closed? false})
+          :header (conj acc {:type :header, :line (:line classified)})
+          (:bullet-list :ordered-list)
+            (if (and last-group
+                     (or (= (:type last-group) :bullet-list)
+                         (= (:type last-group) :ordered-list))
+                     (or (> (:indent classified) 0)
+                         (= (:type last-group) (:type classified))))
+              (update acc
+                      (dec (count acc))
+                      #(update % :lines conj (:line classified)))
+              (conj acc
+                    {:type (:type classified), :lines [(:line classified)]}))
+          (:blockquote :table)
+            (if (and last-group (= (:type last-group) (:type classified)))
+              (update acc
+                      (dec (count acc))
+                      #(update % :lines conj (:line classified)))
+              (conj acc
+                    {:type (:type classified), :lines [(:line classified)]}))
+          :rule (conj acc {:type :rule})
+          :paragraph (conj acc {:type :paragraph, :line (:line classified)})
+          :empty acc)))
+    []
+    lines))
 
 (defn- convert-group-to-adf
   "Convert a grouped line structure to ADF format."
   [group]
   (case (:type group)
-    :header
-    (let [level (count (take-while #(= % \#) (:line group)))
-          heading-text (str/trim (subs (:line group) level))]
-      (when (and (<= 1 level 6) (not (str/blank? heading-text)))
-        (create-heading level (parse-inline-formatting heading-text))))
-
-    :bullet-list
-    (parse-nested-list (:lines group) :bullet-list)
-
-    :ordered-list
-    (parse-nested-list (:lines group) :ordered-list)
-
-    :blockquote
-    (let [quote-lines (map #(str/trim (subs % 2)) (:lines group))
-          quote-text (str/join "\n" quote-lines)]
-      (create-blockquote [(create-paragraph (parse-inline-formatting quote-text))]))
-
-    :code-block
-    (when (:closed? group)
-      (create-code-block (str/join "\n" (:lines group)) (:language group)))
-
-    :rule
-    (create-rule)
-
-    :table
-    (parse-table-lines (:lines group))
-
-    :paragraph
-    (create-paragraph (parse-inline-formatting (:line group)))
-
+    :header (let [level (count (take-while #(= % \#) (:line group)))
+                  heading-text (str/trim (subs (:line group) level))]
+              (when (and (<= 1 level 6) (not (str/blank? heading-text)))
+                (create-heading level (parse-inline-formatting heading-text))))
+    :bullet-list (parse-nested-list (:lines group) :bullet-list)
+    :ordered-list (parse-nested-list (:lines group) :ordered-list)
+    :blockquote (let [quote-lines (map #(str/trim (subs % 2)) (:lines group))
+                      quote-text (str/join "\n" quote-lines)]
+                  (create-blockquote [(create-paragraph (parse-inline-formatting
+                                                          quote-text))]))
+    :code-block (when (:closed? group)
+                  (create-code-block (str/join "\n" (:lines group))
+                                     (:language group)))
+    :rule (create-rule)
+    :table (parse-table-lines (:lines group))
+    :paragraph (create-paragraph (parse-inline-formatting (:line group)))
     nil))
 
 (defn parse-block-elements

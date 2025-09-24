@@ -67,27 +67,27 @@
           error-type (:error initial-data-result)]
       (cond
         (and editor (= error-type :user-cancelled))
-        {:error :user-cancelled,
-         :message "Editor cancelled or no content provided",
-         :context {:action :exit-gracefully}}
+          {:error :user-cancelled,
+           :message "Editor cancelled or no content provided",
+           :context {:action :exit-gracefully}}
         (and file (= error-type :file-not-found))
-        {:error :file-not-found,
-         :message (str "Error reading file: " file),
-         :context {:file file, :action :exit-with-error}}
+          {:error :file-not-found,
+           :message (str "Error reading file: " file),
+           :context {:file file, :action :exit-with-error}}
         (= error-type :no-input)
-        {:error :no-input,
-         :message "Error: story summary required",
-         :context
-         {:usage-help
-          ["Usage: crucible quick-story \"Your story summary\""
-           "   or: crucible qs \"Your story summary\""
-           "   or: crucible qs \"Your story summary\" -d \"Description here\""
-           "   or: crucible qs -e  (open editor)"
-           "   or: crucible qs -f filename.md  (from file)"
-           "   or: crucible qs --ai-only \"test content\"  (AI enhancement only)"
-           "   or: crucible qs --list-drafts  (show available drafts)"
-           "   or: crucible qs --recover <filename>  (recover from draft)"],
-          :action :exit-with-error}}
+          {:error :no-input,
+           :message "Error: story summary required",
+           :context
+             {:usage-help
+                ["Usage: crucible quick-story \"Your story summary\""
+                 "   or: crucible qs \"Your story summary\""
+                 "   or: crucible qs \"Your story summary\" -d \"Description here\""
+                 "   or: crucible qs -e  (open editor)"
+                 "   or: crucible qs -f filename.md  (from file)"
+                 "   or: crucible qs --ai-only \"test content\"  (AI enhancement only)"
+                 "   or: crucible qs --list-drafts  (show available drafts)"
+                 "   or: crucible qs --recover <filename>  (recover from draft)"],
+              :action :exit-with-error}}
         :else initial-data-result))))
 
 (defn apply-ai-enhancement
@@ -97,9 +97,7 @@
         ai-enabled (and (not no-ai)
                         (or ai ai-only (:enabled ai-config false))
                         (:gateway-url ai-config))]
-    (if ai-enabled
-      (ai/enhance-content initial-data ai-config)
-      initial-data)))
+    (if ai-enabled (ai/enhance-content initial-data ai-config) initial-data)))
 
 (defn handle-ai-review
   "Handle AI review editor for enhanced content"
@@ -113,11 +111,11 @@
         (cond (:success review-result) {:success true,
                                         :result (:result review-result)}
               (:error review-result)
-              {:error :review-cancelled,
-               :message "Review cancelled - ticket creation aborted",
-               :context {:review-error (:error review-result),
-                         :original-error (:message review-result),
-                         :action :exit-gracefully}}
+                {:error :review-cancelled,
+                 :message "Review cancelled - ticket creation aborted",
+                 :context {:review-error (:error review-result),
+                           :original-error (:message review-result),
+                           :action :exit-gracefully}}
               :else {:error :review-failed,
                      :message "Unexpected review result",
                      :context {:review-result review-result}}))
@@ -145,8 +143,8 @@
     (if dry-run
       (let [{:keys [title description]} final-data
             sprint-result (sprint-detection/show-dry-run-sprint-info
-                           sprint-info
-                           jira-config)]
+                            sprint-info
+                            jira-config)]
         {:success true,
          :result {:mode :dry-run,
                   :title title,
@@ -162,7 +160,7 @@
   (let [missing-fields (cond-> []
                          (not (:base-url jira-config)) (conj :base-url)
                          (not (:default-project jira-config))
-                         (conj :default-project))]
+                           (conj :default-project))]
     (if (empty? missing-fields)
       {:success true, :result {:config jira-config}}
       {:error :missing-config,
@@ -180,20 +178,20 @@
         issue-data {:fields {:project {:key (:default-project jira-config)},
                              :summary title,
                              :issuetype {:name (:default-issue-type
-                                                jira-config)},
+                                                 jira-config)},
                              :description (jira/text->adf description)}}
         ;; Add assignee if auto-assign is enabled and we have user info
         issue-data (if (and user-info (:accountId user-info))
                      (assoc-in issue-data
-                               [:fields :assignee]
-                               {:accountId (:accountId user-info)})
+                       [:fields :assignee]
+                       {:accountId (:accountId user-info)})
                      issue-data)
         ;; Add default fix version if configured
         default-fix-version-id (:default-fix-version-id jira-config)
         issue-data (if default-fix-version-id
                      (assoc-in issue-data
-                               [:fields :fixVersions]
-                               [{:id default-fix-version-id}])
+                       [:fields :fixVersions]
+                       [{:id default-fix-version-id}])
                      issue-data)
         ;; Add custom fields from configuration
         custom-fields (:custom-fields jira-config {})
@@ -201,20 +199,20 @@
         ;; fields
         default-story-points (:default-story-points jira-config)
         custom-fields-with-story-points
-        (if (and default-story-points
-                 (not (some #(str/includes? (str %) "story")
-                            (keys custom-fields))))
+          (if (and default-story-points
+                   (not (some #(str/includes? (str %) "story")
+                              (keys custom-fields))))
             ;; Story points field is commonly customfield_10002, but this
             ;; should be configurable. For now, add it to custom-fields if
             ;; story-points-field is configured
-          (if-let [story-points-field (:story-points-field jira-config)]
-            (assoc custom-fields story-points-field default-story-points)
+            (if-let [story-points-field (:story-points-field jira-config)]
+              (assoc custom-fields story-points-field default-story-points)
+              custom-fields)
             custom-fields)
-          custom-fields)
         issue-data
-        (if (seq custom-fields-with-story-points)
-          (update issue-data :fields merge custom-fields-with-story-points)
-          issue-data)]
+          (if (seq custom-fields-with-story-points)
+            (update issue-data :fields merge custom-fields-with-story-points)
+            issue-data)]
     issue-data))
 
 (defn create-jira-ticket

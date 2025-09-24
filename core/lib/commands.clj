@@ -33,10 +33,10 @@
   [explicit-command stdin-content]
   (when (and explicit-command (not (string? explicit-command)))
     (throw (ex-info "Explicit command must be a string"
-                    {:type :invalid-input :value explicit-command})))
+                    {:type :invalid-input, :value explicit-command})))
   (when (and stdin-content (not (string? stdin-content)))
     (throw (ex-info "Stdin content must be a string"
-                    {:type :invalid-input :value stdin-content})))
+                    {:type :invalid-input, :value stdin-content})))
   (if explicit-command
     {:command explicit-command, :method nil, :is-detected false}
     (if (str/blank? stdin-content)
@@ -52,19 +52,22 @@
   [stdin-content command-info]
   (when-not (string? stdin-content)
     (throw (ex-info "Stdin content must be a string"
-                    {:type :invalid-input :value stdin-content})))
+                    {:type :invalid-input, :value stdin-content})))
   (when-not (map? command-info)
     (throw (ex-info "Command info must be a map"
-                    {:type :invalid-input :value command-info})))
+                    {:type :invalid-input, :value command-info})))
   (let [timestamp (LocalDateTime/now)
         time-formatter (DateTimeFormatter/ofPattern "HH:mm:ss")
         formatted-time (.format timestamp time-formatter)
         working-dir (System/getProperty "user.dir")
         {:keys [command method is-detected]} command-info]
-    (->> (str "### Command output at " formatted-time "\n"
-              "Working directory: " working-dir "\n")
-         (cond-> command
-           (str "Command: `" command "`\n"))
+    (->> (str "### Command output at "
+              formatted-time
+              "\n"
+              "Working directory: "
+              working-dir
+              "\n")
+         (cond-> command (str "Command: `" command "`\n"))
          (cond-> (and is-detected method)
            (str (case method
                   :processhandle "(auto-detected via ProcessHandle)\n"
@@ -72,8 +75,7 @@
                   :none ""
                   nil "")))
          (str "\n```bash\n" stdin-content)
-         (cond-> (not (str/ends-with? stdin-content "\n"))
-           (str "\n"))
+         (cond-> (not (str/ends-with? stdin-content "\n")) (str "\n"))
          (str "```\n")
          (str "\n"))))
 
@@ -83,17 +85,18 @@
   [log-path content-to-append]
   (when-not (string? log-path)
     (throw (ex-info "Log path must be a string"
-                    {:type :invalid-input :value log-path})))
+                    {:type :invalid-input, :value log-path})))
   (when-not (string? content-to-append)
     (throw (ex-info "Content to append must be a string"
-                    {:type :invalid-input :value content-to-append})))
+                    {:type :invalid-input, :value content-to-append})))
   (try
     (daily-log/create-daily-log-from-template log-path)
-    (let [current-content (slurp (str log-path))
-          sections-pattern
-          #"(?m)^## Commands & Outputs.*\n(?:<!-- .*? -->\n)?((?:(?!^##).*\n)*)"
-          next-section-pattern #"(?m)^## (?!Commands & Outputs)"
-          matcher (re-matcher sections-pattern current-content)]
+    (let
+      [current-content (slurp (str log-path))
+       sections-pattern
+         #"(?m)^## Commands & Outputs.*\n(?:<!-- .*? -->\n)?((?:(?!^##).*\n)*)"
+       next-section-pattern #"(?m)^## (?!Commands & Outputs)"
+       matcher (re-matcher sections-pattern current-content)]
       (if (.find matcher)
         (let [section-end (.end matcher)
               remaining-content (subs current-content section-end)
@@ -137,8 +140,13 @@
                         :none "unknown"
                         nil "unknown"
                         "unknown")]
-      (str "✓ Output piped to " log-path
-           " (detected via " method-name ": " (:command command-info) ")"))
+      (str "✓ Output piped to "
+           log-path
+           " (detected via "
+           method-name
+           ": "
+           (:command command-info)
+           ")"))
     (str "✓ Output piped to " log-path)))
 
 (defn- provide-user-feedback
@@ -154,10 +162,8 @@
   (let [command-info (detect-command-info explicit-command stdin-content)
         log-path (daily-log/get-daily-log-path)
         formatted-content (format-log-entry stdin-content command-info)]
-
     ;; Write to stdout (tee-like behavior)
     (write-to-stdout stdin-content)
-
     ;; Insert content into log
     (let [insert-result (insert-log-content log-path formatted-content)]
       (when (:success insert-result)
@@ -194,20 +200,20 @@
                                   :updated :project :components :labels
                                   :fixVersions :versions}
                 custom-fields (filter #(str/starts-with? (name %) "customfield")
-                                      (keys fields))]
+                                (keys fields))]
             (println (str "\n=== Ticket: " (:key data) " ==="))
             (println "\nStandard Fields:")
             (doseq [field-key standard-fields]
               (when-let [value (get fields field-key)]
                 (let [display-value
-                      (cond (map? value) (or (:displayName value)
-                                             (:name value)
-                                             (:value value)
-                                             (str value))
-                            (sequential? value)
-                            (str/join ", "
-                                      (map #(or (:name %) (str %)) value))
-                            :else (str value))]
+                        (cond (map? value) (or (:displayName value)
+                                               (:name value)
+                                               (:value value)
+                                               (str value))
+                              (sequential? value)
+                                (str/join ", "
+                                          (map #(or (:name %) (str %)) value))
+                              :else (str value))]
                   (when (and display-value (not= display-value ""))
                     (println (str "  " (name field-key) ": " display-value))))))
             (when (seq custom-fields)
@@ -217,18 +223,18 @@
                       field-name (name field-key)]
                   (when value
                     (let [display-value
-                          (cond (map? value) (or (:value value)
-                                                 (:displayName value)
-                                                 (str value))
-                                (sequential? value)
-                                (str/join ", "
-                                          (map #(or (:value %) (str %))
-                                               value))
-                                :else (str value))]
+                            (cond (map? value) (or (:value value)
+                                                   (:displayName value)
+                                                   (str value))
+                                  (sequential? value)
+                                    (str/join ", "
+                                              (map #(or (:value %) (str %))
+                                                value))
+                                  :else (str value))]
                       (println (str "  " field-name ": " display-value)))))))
             (println "\n=== Configuration Helper ===")
             (println
-             "To use these custom fields in your config, add to crucible.edn:")
+              "To use these custom fields in your config, add to crucible.edn:")
             (println "```clojure")
             (println ":jira {:custom-fields {")
             (when (seq custom-fields)
@@ -252,21 +258,28 @@
   [config-status]
   (when-not (map? config-status)
     (throw (ex-info "Config status must be a map"
-                    {:type :invalid-input :value config-status})))
+                    {:type :invalid-input, :value config-status})))
   (let [{:keys [project-config xdg-config]} config-status
-        make-status (fn [config config-type]
-                      (-> {:category "Config"}
-                          (cond-> (not (:exists config))
-                            (assoc :level :info
-                                   :message (str config-type " config " (:path config) " (not found)"))
-                            (not (:readable config))
-                            (assoc :level :error
-                                   :message (str config-type " config " (:path config) " (not readable)"))
-                            :else
-                            (assoc :level :ok
-                                   :message (str config-type " config " (:path config) " (loaded)")))))]
-    [(make-status project-config "Project")
-     (make-status xdg-config "User")]))
+        make-status
+          (fn [config config-type]
+            (->
+              {:category "Config"}
+              (cond->
+                (not (:exists config))
+                  (assoc :level
+                    :info :message
+                    (str config-type " config " (:path config) " (not found)"))
+                (not (:readable config)) (assoc :level
+                                           :error :message
+                                           (str config-type
+                                                " config "
+                                                (:path config)
+                                                " (not readable)"))
+                :else
+                  (assoc :level
+                    :ok :message
+                    (str config-type " config " (:path config) " (loaded)")))))]
+    [(make-status project-config "Project") (make-status xdg-config "User")]))
 
 (defn- check-environment-variables
   "Check environment variables and return status information.
@@ -274,27 +287,30 @@
   [env-status]
   (when-not (map? env-status)
     (throw (ex-info "Environment status must be a map"
-                    {:type :invalid-input :value env-status})))
-  (let [env-vars ["CRUCIBLE_JIRA_URL" "CRUCIBLE_JIRA_USER"
-                  "CRUCIBLE_JIRA_TOKEN" "CRUCIBLE_WORKSPACE_DIR" "EDITOR"]
+                    {:type :invalid-input, :value env-status})))
+  (let [env-vars ["CRUCIBLE_JIRA_URL" "CRUCIBLE_JIRA_USER" "CRUCIBLE_JIRA_TOKEN"
+                  "CRUCIBLE_WORKSPACE_DIR" "EDITOR"]
         set-count (->> env-vars
                        (filter #(:set (get env-status %)))
                        count)
         total-count (count env-vars)]
-    [{:level (if (= set-count total-count) :ok :warning)
-      :category "Config"
-      :message (str "Environment variables " set-count "/" total-count " set")}]))
+    [{:level (if (= set-count total-count) :ok :warning),
+      :category "Config",
+      :message
+        (str "Environment variables " set-count "/" total-count " set")}]))
 
 (defn- check-password-manager
   "Check if password manager is available.
    Returns a vector of maps with :level :category :message keys."
   []
-  (let [pass-available (try
-                         (let [result (process/shell {:out :string :err :string} "which" "pass")]
-                           (= 0 (:exit result)))
-                         (catch Exception _ false))]
-    [{:level (if pass-available :ok :warning)
-      :category "Config"
+  (let [pass-available (try (let [result (process/shell {:out :string,
+                                                         :err :string}
+                                                        "which"
+                                                        "pass")]
+                              (= 0 (:exit result)))
+                            (catch Exception _ false))]
+    [{:level (if pass-available :ok :warning),
+      :category "Config",
       :message (if pass-available
                  "Password manager pass available"
                  "Password manager pass not found")}]))
@@ -305,23 +321,26 @@
   [workspace-config workspace-check]
   (when-not (map? workspace-config)
     (throw (ex-info "Workspace config must be a map"
-                    {:type :invalid-input :value workspace-config})))
+                    {:type :invalid-input, :value workspace-config})))
   (when-not (map? workspace-check)
     (throw (ex-info "Workspace check must be a map"
-                    {:type :invalid-input :value workspace-check})))
-  (let [base-statuses (->> [[:root-dir "Root"]
-                            [:logs-dir "Logs"]
-                            [:tickets-dir "Tickets"]
-                            [:docs-dir "Docs"]]
-                           (mapv (fn [[dir-key label]]
-                                   {:level :ok
-                                    :category "Workspace"
-                                    :message (str label " " (get workspace-config dir-key))})))
+                    {:type :invalid-input, :value workspace-check})))
+  (let [base-statuses
+          (->> [[:root-dir "Root"] [:logs-dir "Logs"] [:tickets-dir "Tickets"]
+                [:docs-dir "Docs"]]
+               (mapv (fn [[dir-key label]]
+                       {:level :ok,
+                        :category "Workspace",
+                        :message
+                          (str label " " (get workspace-config dir-key))})))
         missing-statuses (->> (:missing-list workspace-check)
                               (mapv (fn [missing]
-                                      {:level :warning
-                                       :category "Workspace"
-                                       :message (str (:description missing) " " (:path missing) " (missing)")})))]
+                                      {:level :warning,
+                                       :category "Workspace",
+                                       :message (str (:description missing)
+                                                     " "
+                                                     (:path missing)
+                                                     " (missing)")})))]
     (concat base-statuses missing-statuses)))
 
 (defn- check-jira-connection
@@ -332,17 +351,19 @@
            (:username jira-config)
            (:api-token jira-config))
     (let [conn-result (jira/test-connection jira-config)
-          base-status {:level (if (:success conn-result) :ok :error)
-                       :category "Jira"
+          base-status {:level (if (:success conn-result) :ok :error),
+                       :category "Jira",
                        :message (:message conn-result)}
           project-status (when (and (:success conn-result)
                                     (:default-project jira-config))
-                           {:level :ok
-                            :category "Jira"
-                            :message (str "Default project " (:default-project jira-config) " configured")})]
+                           {:level :ok,
+                            :category "Jira",
+                            :message (str "Default project "
+                                          (:default-project jira-config)
+                                          " configured")})]
       (if project-status [base-status project-status] [base-status]))
-    [{:level :error
-      :category "Jira"
+    [{:level :error,
+      :category "Jira",
       :message "Missing configuration (base-url, username, or api-token)"}]))
 
 (defn- check-sprint-information
@@ -354,38 +375,45 @@
              (:api-token jira-config))
     (try
       (if-let [sprint-info (jira/get-current-sprint-info jira-config)]
-        (let [base-statuses [{:level :ok
-                              :category "Sprint"
-                              :message (str "Active sprint: " (:name sprint-info) " (ID: " (:id sprint-info) ")")}
-                             {:level :info
-                              :category "Sprint"
-                              :message (str "Days remaining: " (:days-remaining sprint-info))}
-                             {:level :info
-                              :category "Sprint"
-                              :message (str "Assigned tickets: " (count (:assigned-tickets sprint-info)))}]
+        (let [base-statuses [{:level :ok,
+                              :category "Sprint",
+                              :message (str "Active sprint: "
+                                            (:name sprint-info)
+                                            " (ID: "
+                                            (:id sprint-info)
+                                            ")")}
+                             {:level :info,
+                              :category "Sprint",
+                              :message (str "Days remaining: "
+                                            (:days-remaining sprint-info))}
+                             {:level :info,
+                              :category "Sprint",
+                              :message (str "Assigned tickets: "
+                                            (count (:assigned-tickets
+                                                     sprint-info)))}]
               debug-status (when (:debug jira-config)
-                             {:level :info
-                              :category "Sprint"
+                             {:level :info,
+                              :category "Sprint",
                               :message (str "JQL Query: " (:jql sprint-info))})
-              filter-status (let [exclude-statuses (:sprint-exclude-statuses jira-config)
-                                  show-done (:sprint-show-done-tickets jira-config)]
-                              (cond
-                                show-done
-                                {:level :info
-                                 :category "Sprint"
-                                 :message "Showing all tickets including Done"}
-
-                                exclude-statuses
-                                {:level :info
-                                 :category "Sprint"
-                                 :message (str "Excluding statuses: " (str/join ", " exclude-statuses))}))]
+              filter-status
+                (let [exclude-statuses (:sprint-exclude-statuses jira-config)
+                      show-done (:sprint-show-done-tickets jira-config)]
+                  (cond show-done {:level :info,
+                                   :category "Sprint",
+                                   :message
+                                     "Showing all tickets including Done"}
+                        exclude-statuses
+                          {:level :info,
+                           :category "Sprint",
+                           :message (str "Excluding statuses: "
+                                         (str/join ", " exclude-statuses))}))]
           (filter some? (concat base-statuses [debug-status filter-status])))
-        [{:level :warning
-          :category "Sprint"
+        [{:level :warning,
+          :category "Sprint",
           :message "No active sprint found"}])
       (catch Exception e
-        [{:level :warning
-          :category "Sprint"
+        [{:level :warning,
+          :category "Sprint",
           :message (str "Could not fetch sprint info: " (.getMessage e))}]))))
 
 (defn- check-ai-configuration
@@ -399,41 +427,47 @@
             duration (- (System/currentTimeMillis) start-time)
             model (:model ai-config "unknown")]
         (if (:success test-result)
-          [{:level :ok
-            :category "AI"
-            :message (str "Authentication successful (" model ", " duration "ms)")}]
+          [{:level :ok,
+            :category "AI",
+            :message
+              (str "Authentication successful (" model ", " duration "ms)")}]
           (case (:error test-result)
-            :unauthorized [{:level :error :category "AI" :message "Authentication failed - check API key"}]
-            :timeout [{:level :error :category "AI" :message "Gateway timeout"}]
-            :rate-limited [{:level :warning :category "AI" :message "Rate limited but accessible"}]
-            [{:level :error :category "AI" :message (:message test-result)}])))
-      [{:level :warning
-        :category "AI"
+            :unauthorized [{:level :error,
+                            :category "AI",
+                            :message "Authentication failed - check API key"}]
+            :timeout
+              [{:level :error, :category "AI", :message "Gateway timeout"}]
+            :rate-limited [{:level :warning,
+                            :category "AI",
+                            :message "Rate limited but accessible"}]
+            [{:level :error,
+              :category "AI",
+              :message (:message test-result)}])))
+      [{:level :warning,
+        :category "AI",
         :message "Enabled but missing gateway-url or api-key"}])
-    [{:level :info
-      :category "AI"
-      :message "Disabled in configuration"}]))
+    [{:level :info, :category "AI", :message "Disabled in configuration"}]))
 
 (defn- check-editor-configuration
   "Check editor configuration and availability.
    Returns a vector of maps with :level :category :message keys."
   [config]
   (if-let [editor (or (:editor config) (System/getenv "EDITOR"))]
-    (let [editor-path (try
-                        (let [result (process/shell {:out :string :err :string} "which" editor)]
-                          (if (= 0 (:exit result))
-                            (str/trim (:out result))
-                            nil))
-                        (catch Exception _ nil))]
+    (let [editor-path
+            (try (let [result (process/shell {:out :string, :err :string}
+                                             "which"
+                                             editor)]
+                   (if (= 0 (:exit result)) (str/trim (:out result)) nil))
+                 (catch Exception _ nil))]
       (if editor-path
-        [{:level :ok
-          :category "Editor"
+        [{:level :ok,
+          :category "Editor",
           :message (str editor " (" editor-path ")")}]
-        [{:level :error
-          :category "Editor"
+        [{:level :error,
+          :category "Editor",
           :message (str editor " (not found in PATH)")}]))
-    [{:level :warning
-      :category "Editor"
+    [{:level :warning,
+      :category "Editor",
       :message "No editor configured (set EDITOR or :editor in config)"}]))
 
 ;; Re-export from doctor namespace for backward compatibility
@@ -451,40 +485,42 @@
         prompts-dir (fs/path root-dir prompts-dir-name)
         target-file (fs/path prompts-dir "jira-enhancement.txt")
         source-file (fs/path "core" "prompts" "jira-enhancement.txt")]
-
     (try
       ;; Check if source template exists
       (when-not (fs/exists? source-file)
-        (println (config/format-error "Default prompt template not found. This might be a development build issue."))
+        (println
+          (config/format-error
+            "Default prompt template not found. This might be a development build issue."))
         (System/exit 1))
-
       ;; Ensure prompts directory exists
-      (when-not (fs/exists? prompts-dir)
-        (fs/create-dirs prompts-dir))
-
+      (when-not (fs/exists? prompts-dir) (fs/create-dirs prompts-dir))
       ;; Check if target file already exists
       (when (fs/exists? target-file)
-        (print (str "AI prompt file already exists at " target-file ". Overwrite? (y/N): "))
+        (print (str "AI prompt file already exists at "
+                    target-file
+                    ". Overwrite? (y/N): "))
         (flush)
         (let [response (read-line)]
           (when-not (= "y" (str/lower-case (str/trim (or response ""))))
             (println "Operation cancelled.")
             (System/exit 0))))
-
       ;; Copy the template file
       (fs/copy source-file target-file {:replace-existing true})
-
       ;; Success message with configuration instructions
-      (println (config/format-success "AI prompt template initialized successfully!"))
+      (println (config/format-success
+                 "AI prompt template initialized successfully!"))
       (println)
       (println "Template copied to:")
       (println (str "  " target-file))
       (println)
       (println "To use this prompt, add the following to your configuration:")
-      (println (config/format-info (str "  :ai {:prompt-file \"" prompts-dir-name "/jira-enhancement.txt\"}")))
+      (println (config/format-info (str "  :ai {:prompt-file \""
+                                        prompts-dir-name
+                                        "/jira-enhancement.txt\"}")))
       (println)
-      (println "You can now edit the prompt file to customize AI enhancement behavior.")
-
+      (println
+        "You can now edit the prompt file to customize AI enhancement behavior.")
       (catch Exception e
-        (println (config/format-error (str "Failed to initialize AI prompt: " (.getMessage e))))
+        (println (config/format-error (str "Failed to initialize AI prompt: "
+                                           (.getMessage e))))
         (System/exit 1)))))

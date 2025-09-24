@@ -72,11 +72,11 @@
   (try
     (daily-log/create-daily-log-from-template log-path)
     (let
-     [current-content (slurp (str log-path))
-      sections-pattern
-      #"(?m)^## Commands & Outputs.*\n(?:<!-- .*? -->\n)?((?:(?!^##).*\n)*)"
-      next-section-pattern #"(?m)^## (?!Commands & Outputs)"
-      matcher (re-matcher sections-pattern current-content)]
+      [current-content (slurp (str log-path))
+       sections-pattern
+         #"(?m)^## Commands & Outputs.*\n(?:<!-- .*? -->\n)?((?:(?!^##).*\n)*)"
+       next-section-pattern #"(?m)^## (?!Commands & Outputs)"
+       matcher (re-matcher sections-pattern current-content)]
       (if (.find matcher)
         (let [section-end (.end matcher)
               remaining-content (subs current-content section-end)
@@ -113,20 +113,23 @@
   (if (:is-detected command-info)
     (let [method-value (:method command-info)
           command-value (:command command-info)
-          method-name (cond
-                        (= method-value :processhandle) "ProcessHandle"
-                        (= method-value :ps) "ps"
-                        (= method-value :none) "auto-detection"
-                        (nil? method-value) "auto-detection"
-                        :else "auto-detection")]
+          method-name (cond (= method-value :processhandle) "ProcessHandle"
+                            (= method-value :ps) "ps"
+                            (= method-value :none) "auto-detection"
+                            (nil? method-value) "auto-detection"
+                            :else "auto-detection")]
       (if (and command-value (not (str/blank? command-value)))
         ;; We have a command - show it
-        (config/format-success
-         (str "Output piped to " log-path
-              " (detected via " method-name ": " command-value ")"))
+        (config/format-success (str "Output piped to "
+                                    log-path
+                                    " (detected via "
+                                    method-name
+                                    ": "
+                                    command-value
+                                    ")"))
         ;; No command detected - show simpler message
         (config/format-success
-         (str "Output piped to " log-path " (piped input detected)"))))
+          (str "Output piped to " log-path " (piped input detected)"))))
     (config/format-success (str "Output piped to " log-path))))
 
 (defn- provide-user-feedback
@@ -142,10 +145,8 @@
   (let [command-info (detect-command-info explicit-command stdin-content)
         log-path (daily-log/get-daily-log-path)
         formatted-content (format-log-entry stdin-content command-info)]
-
     ;; Write to stdout (tee-like behavior)
     (write-to-stdout stdin-content)
-
     ;; Insert content into log
     (let [insert-result (insert-log-content log-path formatted-content)]
       (when (:success insert-result)
@@ -160,8 +161,6 @@
   [& args]
   (if-let [stdin-content (process-stdin-input)]
     (process-pipe-input stdin-content (first args))
-    (do
-      (println "No input received from stdin")
-      {:success false
-       :error {:type :no-input
-               :message "No input received from stdin"}})))
+    (do (println "No input received from stdin")
+        {:success false,
+         :error {:type :no-input, :message "No input received from stdin"}})))

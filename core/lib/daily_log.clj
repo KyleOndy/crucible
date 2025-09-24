@@ -25,10 +25,10 @@
   [template-content date-info]
   (when-not (string? template-content)
     (throw (ex-info "Template content must be a string"
-                    {:type :invalid-input :value template-content})))
+                    {:type :invalid-input, :value template-content})))
   (when-not (map? date-info)
     (throw (ex-info "Date info must be a map"
-                    {:type :invalid-input :value date-info})))
+                    {:type :invalid-input, :value date-info})))
   (-> template-content
       (str/replace "{{DATE}}" (:date date-info))
       (str/replace "{{DAY_NAME}}" (:day-name date-info))
@@ -78,9 +78,9 @@
   (let [editor (System/getenv "EDITOR")]
     (if editor
       (let [result @(process/process [editor (str file-path)] {:inherit true})]
-        {:success true :result {:exit-code (:exit result)}})
-      {:error :editor-not-set
-       :message "EDITOR environment variable not set"
+        {:success true, :result {:exit-code (:exit result)}})
+      {:error :editor-not-set,
+       :message "EDITOR environment variable not set",
        :context {:action :exit-with-error}})))
 
 (defn open-daily-log
@@ -95,18 +95,20 @@
   [date-spec]
   (let [days-ago (cond (= date-spec "yesterday") 1
                        (string? date-spec)
-                       (try (let [num (Integer/parseInt date-spec)]
-                              (if (< num 0)
-                                (- num) ; Convert negative to positive
-                                num))
-                            (catch Exception _
-                              {:error :invalid-date-format
-                               :message (str "Invalid date specification: " date-spec)
-                               :context {:help "Use 'yesterday', '-1', '-2', etc."
-                                         :action :exit-with-error}}))
+                         (try (let [num (Integer/parseInt date-spec)]
+                                (if (< num 0)
+                                  (- num) ; Convert negative to positive
+                                  num))
+                              (catch Exception _
+                                {:error :invalid-date-format,
+                                 :message (str "Invalid date specification: "
+                                               date-spec),
+                                 :context
+                                   {:help "Use 'yesterday', '-1', '-2', etc.",
+                                    :action :exit-with-error}}))
                        (number? date-spec) (Math/abs date-spec)
-                       :else {:error :invalid-date-format
-                              :message "Invalid date specification"
+                       :else {:error :invalid-date-format,
+                              :message "Invalid date specification",
                               :context {:action :exit-with-error}})]
     (if (:error days-ago)
       days-ago ; Return error result
@@ -122,16 +124,16 @@
                             (when (not= days-ago 1) "s")
                             " ago)"))
               (launch-editor log-path))
-          {:error :log-not-found
-           :message (str "No log found for " date-str)
-           :context {:date date-str :action :exit-with-error}})))))
+          {:error :log-not-found,
+           :message (str "No log found for " date-str),
+           :context {:date date-str, :action :exit-with-error}})))))
 
 (defn find-last-working-log
   "Find the most recent daily log file, going back up to configured days"
   []
   (let [config (config/load-config)
         max-days
-        (get-in config [:daily-workflow :start-day :max-look-back-days] 7)
+          (get-in config [:daily-workflow :start-day :max-look-back-days] 7)
         log-dir (ensure-log-directory config)
         today (LocalDate/now)]
     ;; Look backwards from yesterday up to max-days
@@ -162,7 +164,7 @@
                         ;; Remove the "- [ ] " part but keep the
                         ;; indentation
                         task-text
-                        (str/replace trimmed-line #"^-\s*\[\s*\]\s*" "")]
+                          (str/replace trimmed-line #"^-\s*\[\s*\]\s*" "")]
                     ;; Reconstruct with preserved indentation
                     (str (str/join "" (repeat indent-spaces " ")) task-text))))
            (filter #(not (str/blank? (str/trim %))))))))
@@ -172,21 +174,20 @@
   [log-path carry-forward-tasks?]
   (when (and log-path (not (string? log-path)))
     (throw (ex-info "Log path must be a string"
-                    {:type :invalid-input :value log-path})))
+                    {:type :invalid-input, :value log-path})))
   (when-not (boolean? carry-forward-tasks?)
     (throw (ex-info "Carry forward tasks must be a boolean"
-                    {:type :invalid-input :value carry-forward-tasks?})))
+                    {:type :invalid-input, :value carry-forward-tasks?})))
   (if (and log-path carry-forward-tasks?)
-    (try
-      (->> (slurp log-path)
-           (hash-map :content)
-           (assoc :path log-path)
-           (hash-map :result)
-           (assoc :success true))
-      (catch Exception e
-        {:error :file-read-failed,
-         :message "Failed to read previous log file",
-         :context {:log-path log-path, :exception (.getMessage e)}}))
+    (try (->> (slurp log-path)
+              (hash-map :content)
+              (assoc :path log-path)
+              (hash-map :result)
+              (assoc :success true))
+         (catch Exception e
+           {:error :file-read-failed,
+            :message "Failed to read previous log file",
+            :context {:log-path log-path, :exception (.getMessage e)}}))
     {:success true, :result nil}))
 
 (defn fetch-jira-context
@@ -194,16 +195,16 @@
   [jira-config last-log-date activity-options gather-jira? show-sprint?]
   (when-not (map? jira-config)
     (throw (ex-info "Jira config must be a map"
-                    {:type :invalid-input :value jira-config})))
+                    {:type :invalid-input, :value jira-config})))
   (when-not (map? activity-options)
     (throw (ex-info "Activity options must be a map"
-                    {:type :invalid-input :value activity-options})))
+                    {:type :invalid-input, :value activity-options})))
   (when-not (boolean? gather-jira?)
     (throw (ex-info "Gather jira must be a boolean"
-                    {:type :invalid-input :value gather-jira?})))
+                    {:type :invalid-input, :value gather-jira?})))
   (when-not (boolean? show-sprint?)
     (throw (ex-info "Show sprint must be a boolean"
-                    {:type :invalid-input :value show-sprint?})))
+                    {:type :invalid-input, :value show-sprint?})))
   (let [jira-enabled? (and (:base-url jira-config) (:username jira-config))
         fetch-activity (fn []
                          (when (and gather-jira? jira-enabled?)
@@ -214,7 +215,9 @@
                                   {:error :jira-activity-failed,
                                    :message (.getMessage e)}))))
         fetch-sprint (fn []
-                       (when (and show-sprint? jira-enabled? (:auto-add-to-sprint jira-config))
+                       (when (and show-sprint?
+                                  jira-enabled?
+                                  (:auto-add-to-sprint jira-config))
                          (try (jira/get-current-sprint-info jira-config)
                               (catch Exception e
                                 {:error :sprint-info-failed,
@@ -227,10 +230,10 @@
   [last-log log-info-result jira-result]
   (when-not (map? log-info-result)
     (throw (ex-info "Log info result must be a map"
-                    {:type :invalid-input :value log-info-result})))
+                    {:type :invalid-input, :value log-info-result})))
   (when-not (map? jira-result)
     (throw (ex-info "Jira result must be a map"
-                    {:type :invalid-input :value jira-result})))
+                    {:type :invalid-input, :value jira-result})))
   (let [carried-tasks (->> log-info-result
                            :result
                            :content
@@ -251,24 +254,24 @@
         last-log (find-last-working-log)
         ;; I/O: Load previous log information
         log-info-result (load-previous-log-info
-                         (:path last-log)
-                         (get start-day-config :carry-forward-tasks true))
+                          (:path last-log)
+                          (get start-day-config :carry-forward-tasks true))
         ;; I/O: Fetch Jira context
         jira-config (:jira config)
         activity-options
-        {:activity-days (get start-day-config :jira-activity-days 5),
-         :exclude-own-activity
-         (get start-day-config :jira-exclude-own-activity true),
-         :activity-types (get start-day-config
-                              :jira-activity-types
-                              ["status" "assignee" "priority" "resolution"]),
-         :max-activities (get start-day-config :jira-max-activities 10)}
+          {:activity-days (get start-day-config :jira-activity-days 5),
+           :exclude-own-activity
+             (get start-day-config :jira-exclude-own-activity true),
+           :activity-types (get start-day-config
+                                :jira-activity-types
+                                ["status" "assignee" "priority" "resolution"]),
+           :max-activities (get start-day-config :jira-max-activities 10)}
         jira-result (fetch-jira-context
-                     jira-config
-                     (:date last-log)
-                     activity-options
-                     (get start-day-config :gather-jira-context true)
-                     (get start-day-config :show-sprint-status true))]
+                      jira-config
+                      (:date last-log)
+                      activity-options
+                      (get start-day-config :gather-jira-context true)
+                      (get start-day-config :show-sprint-status true))]
     ;; Pure: Build final context map
     (build-context-map last-log log-info-result jira-result)))
 
@@ -277,7 +280,7 @@
   [context]
   (when-not (map? context)
     (throw (ex-info "Context must be a map"
-                    {:type :invalid-input :value context})))
+                    {:type :invalid-input, :value context})))
   (let [{:keys [last-log carried-tasks jira-activity sprint-info]} context
         has-any-context? (or last-log carried-tasks jira-activity sprint-info)
         format-task (fn [task]
@@ -288,10 +291,13 @@
                          (->> (:assigned-tickets sprint-info)
                               (map #(str "- " %))))]
     (->> []
-         (cond-> has-any-context?
-           (concat ["## Previous Context"]))
+         (cond-> has-any-context? (concat ["## Previous Context"]))
          (cond-> last-log
-           (concat [(str "Last log: " (:date last-log) " (" (:days-ago last-log) " days ago)")]))
+           (concat [(str "Last log: "
+                         (:date last-log)
+                         " ("
+                         (:days-ago last-log)
+                         " days ago)")]))
          (cond-> (seq carried-tasks)
            (concat (concat ["" "### Carried Forward Tasks"]
                            (map format-task carried-tasks))))
@@ -300,11 +306,14 @@
                            (map #(str "- " %) jira-activity))))
          (cond-> sprint-info
            (concat (concat ["" "### Sprint Status"]
-                           [(str "Sprint: " (:name sprint-info) " (" (:days-remaining sprint-info) " days remaining)")]
+                           [(str "Sprint: "
+                                 (:name sprint-info)
+                                 " ("
+                                 (:days-remaining sprint-info)
+                                 " days remaining)")]
                            (when (seq sprint-tickets)
                              (concat ["Assigned tickets:"] sprint-tickets)))))
-         (cond-> has-any-context?
-           (concat ["" "---" ""])))))
+         (cond-> has-any-context? (concat ["" "---" ""])))))
 
 (defn add-context-sections
   "Add context sections after the main header in daily log content"
@@ -321,7 +330,7 @@
           (let [before-lines (take (inc header-idx) lines)
                 after-lines (drop (inc header-idx) lines)
                 enhanced-lines
-                (concat before-lines [""] context-sections after-lines)]
+                  (concat before-lines [""] context-sections after-lines)]
             (str/join "\n" enhanced-lines))
           ;; No header found, prepend context
           (str/join "\n" (concat context-sections [""] lines))))
