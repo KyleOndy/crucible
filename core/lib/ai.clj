@@ -75,6 +75,7 @@
   (let [parsed (json/parse-string response-body true)
         paths (or (:response-paths config)
                   [[:choices 0 :message :content] ; OpenAI/OpenRouter
+                   [:content 0 :text] ; Anthropic/Claude format
                    [:context 0 :text] ; Alternative format
                    [:data :text] ; Generic format
                    [:response :content] ; Another generic format
