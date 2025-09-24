@@ -12,6 +12,7 @@
   (str "Crucible - SRE productivity system\n\n" "Commands:\n"
        "  help              Show this help\n"
        "  doctor            System health check\n"
+       "  init-prompt       Initialize AI prompt template\n"
        "  inspect-ticket <id> View ticket fields\n"
        "  l                 Open daily log\n"
        "  sd                Start day (enhanced log)\n"
@@ -228,10 +229,18 @@
          :message (str "Doctor command failed: " (.getMessage e))
          :context {:command "doctor"}}))
 
+    "init-prompt"
+    (try
+      {:success true :result ((:init-prompt command-registry) args)}
+      (catch Exception e
+        {:error :command-failed
+         :message (str "Init prompt command failed: " (.getMessage e))
+         :context {:command "init-prompt" :args args}}))
+
     ;; Unknown command
     {:error :unknown-command
      :message (str "Unknown command: " command)
-     :context {:available-commands ["help" "log" "l" "pipe" "start-day" "sd" "quick-story" "qs" "inspect-ticket" "doctor"]
+     :context {:available-commands ["help" "log" "l" "pipe" "start-day" "sd" "quick-story" "qs" "inspect-ticket" "doctor" "init-prompt"]
                :action :show-help}}))
 
 (defn -main

@@ -444,8 +444,11 @@
   [args]
   (let [config (config/load-config)
         workspace-config (:workspace config)
-        root-dir (config/expand-workspace-paths workspace-config)
-        prompts-dir (fs/path (:root-dir root-dir) (:prompts-dir workspace-config))
+        ;; Use the root-dir directly from workspace config
+        root-dir (config/expand-path (or (:root-dir workspace-config) "."))
+        ;; Default prompts directory to "prompts" if not specified
+        prompts-dir-name (or (:prompts-dir workspace-config) "prompts")
+        prompts-dir (fs/path root-dir prompts-dir-name)
         target-file (fs/path prompts-dir "jira-enhancement.txt")
         source-file (fs/path "core" "prompts" "jira-enhancement.txt")]
 
@@ -478,7 +481,7 @@
       (println (str "  " target-file))
       (println)
       (println "To use this prompt, add the following to your configuration:")
-      (println (config/format-info (str "  :ai {:prompt-file \"prompts/jira-enhancement.txt\"}")))
+      (println (config/format-info (str "  :ai {:prompt-file \"" prompts-dir-name "/jira-enhancement.txt\"}")))
       (println)
       (println "You can now edit the prompt file to customize AI enhancement behavior.")
 
