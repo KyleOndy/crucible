@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__clojure-mcp__*",
+      "Bash(bb:*)",
+      "mcp__clojure"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/auto-format.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

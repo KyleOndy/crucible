@@ -1,0 +1,7 @@
+{
+  "choices": [{
+    "message": {
+      "content": "{\n  \"title\": \"Enhanced Title\",\n  \"description\": \"Enhanced description\"\n}"
+    }
+  }]
+}

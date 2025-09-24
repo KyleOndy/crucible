@@ -1,0 +1,12 @@
+Rewrite this JIRA ticket for clarity and professionalism:
+- Title: Clear, action-oriented (max 100 chars)
+- Description: Well-structured using ONLY the provided information
+- Preserve all technical details and requirements
+- Do NOT add new information, examples, or assumptions
+- Focus on improving structure, grammar, and clarity
+
+Return JSON only:
+{
+  "title": "improved title",
+  "description": "improved description"
+}

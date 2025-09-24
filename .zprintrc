@@ -1,0 +1,44 @@
+{:width 80
+ :map {:comma? false
+       :hang? true
+       :indent 2}
+ :list {:hang? false
+        :indent 2}
+ :vector {:wrap? true
+          :hang? true
+          :indent 1}
+ :set {:wrap? true
+       :hang? true
+       :indent 1}
+ :fn-map {"defn" :arg1-body
+          "defn-" :arg1-body
+          "def" :arg1-body
+          "defonce" :arg1-body
+          "defmacro" :arg1-body
+          "fn" :arg1-body
+          "when" :arg1-body
+          "when-not" :arg1-body
+          "when-let" :arg1-body
+          "when-first" :arg1-body
+          "if" :arg1-body
+          "if-not" :arg1-body
+          "if-let" :arg1-body
+          "cond" :arg1-body
+          "condp" :arg1-body
+          "case" :arg1-body
+          "let" :arg1-body
+          "loop" :arg1-body
+          "binding" :arg1-body
+          "doseq" :arg1-body
+          "dotimes" :arg1-body
+          "for" :arg1-body
+          "with-open" :arg1-body
+          "try" :arg1-body
+          "catch" :arg1-body
+          "finally" :arg1-body
+          "ns" :arg1-body
+          "deftest" :arg1-body
+          "testing" :arg1-body
+          "is" :arg1-body}
+ :remove {:fn-force-nl #{:noarg1-body}}
+ :style :community}
