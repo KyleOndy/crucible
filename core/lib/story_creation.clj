@@ -102,9 +102,10 @@
 (defn handle-ai-review
   "Handle AI review editor for enhanced content"
   [initial-data enhanced-data flags]
-  (let [{:keys [editor ai-only]} flags
-        ai-enhanced (not= initial-data enhanced-data)]
-    (when (and ai-enhanced (not= initial-data enhanced-data))
+  (let [{:keys [editor ai-only debug debug-ai]} flags
+        ai-enhanced (not= initial-data enhanced-data)
+        debug-mode (or debug debug-ai)]
+    (when (and ai-enhanced (not= initial-data enhanced-data) debug-mode)
       (ai/show-enhanced-content initial-data enhanced-data ai-only))
     (if (and editor ai-enhanced)
       (let [review-result (ticket-editor/review-enhanced-ticket enhanced-data)]

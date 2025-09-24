@@ -3,7 +3,6 @@
   (:require [lib.config :as config]
             [lib.jira :as jira]))
 
-
 (defn validate-sprint-config
   "Validate sprint detection configuration"
   [jira-config]
@@ -12,7 +11,6 @@
            (:default-project jira-config))
     {:success true, :result {:valid true, :config jira-config}}
     {:success true, :result {:valid false, :config jira-config}}))
-
 
 (defn setup-sprint-debug-context
   "Setup debug context for sprint detection"
@@ -26,7 +24,6 @@
               :fallback-boards fallback-boards,
               :sprint-pattern sprint-pattern,
               :debug? debug?}}))
-
 
 (defn fetch-sprint-data
   "Fetch sprint data from Jira API"
@@ -66,7 +63,6 @@
        :message "Failed to fetch sprint data",
        :context {:exception (.getMessage e)}})))
 
-
 (defn process-sprint-results
   "Process sprint data and determine final sprint selection"
   [sprint-data jira-config]
@@ -95,30 +91,15 @@
                         jira-config
                         (str "  sprints count: " (count sprints)))
       (config/debug-log :jira jira-config (str "  method variable: " method))
-      (cond (= 1 (count sprints))
-              (do (println (str "  Found 1 active sprint across "
-                                board-count
-                                " boards ("
-                                method
-                                ")"))
-                  {:success true,
-                   :result {:sprint (first sprints), :method method}})
-            (> (count sprints) 1) (do (println (str "  Found "
-                                                    (count sprints)
-                                                    " active sprints, using: "
-                                                    (:name (first sprints))
-                                                    " ("
-                                                    method
-                                                    ")"))
-                                      {:success true,
-                                       :result {:sprint (first sprints),
-                                                :method method}})
-            :else (do (println (str "  No active sprints found (" method ")"))
-                      {:success true,
-                       :result
-                         {:sprint nil, :method method, :reason :no-sprints}})))
+      (cond (= 1 (count sprints)) ({:success true,
+                                    :result {:sprint (first sprints),
+                                             :method method}})
+            (> (count sprints) 1) {:success true,
+                                   :result {:sprint (first sprints),
+                                            :method method}}
+            :else {:success true,
+                   :result {:sprint nil, :method method, :reason :no-sprints}}))
     {:success true, :result {:sprint nil, :method :none, :reason :no-data}}))
-
 
 (defn show-troubleshooting-info
   "Show troubleshooting information when sprint detection fails"
@@ -171,7 +152,6 @@
             "     - Try: c jira-check to test basic connectivity")))
     {:success true, :result {:troubleshooting-shown true}}))
 
-
 (defn run-sprint-detection
   "Run sprint detection for both dry-run and normal modes"
   [jira-config]
@@ -212,7 +192,6 @@
       ;; Configuration invalid - return nil (original behavior)
       nil)))
 
-
 (defn log-sprint-debug-info
   "Log final sprint assignment debug information"
   [sprint-info jira-config]
@@ -222,7 +201,6 @@
       (println (str "  Final sprint-info: " sprint-info))
       (println (str "  sprint-info nil?: " (nil? sprint-info))))
     {:success true, :result {:debug-logged debug?}}))
-
 
 (defn show-dry-run-sprint-info
   "Show sprint information in dry-run mode"
@@ -241,7 +219,6 @@
               {:success true,
                :result {:action :would-not-add, :reason :no-sprint}})
         :else {:success true, :result {:action :sprint-disabled}}))
-
 
 (defn add-ticket-to-sprint
   "Add created ticket to detected sprint if available"

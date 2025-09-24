@@ -169,7 +169,9 @@
                                 {:success true,
                                  :result :ticket-created,
                                  :side-effect {:type :creation-success,
-                                               :issue-key issue-key}})
+                                               :issue-key issue-key,
+                                               :sprint-info sprint-info,
+                                               :sprint-result sprint-result}})
                               ;; Handle creation error
                               {:error :ticket-creation-failed,
                                :message (:message creation-result),

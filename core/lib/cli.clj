@@ -169,7 +169,7 @@
               :message (str "Start day command failed: " (.getMessage e)),
               :context {:command "start-day"}}))
     ("quick-story" "qs")
-      (try {:success true, :result ((:quick-story command-registry) args)}
+      (try ((:quick-story command-registry) args)
            (catch Exception e
              {:error :command-failed,
               :message (str "Quick story command failed: " (.getMessage e)),
@@ -207,28 +207,57 @@
                     {:type :invalid-input, :value command-registry})))
   (let [command (first args)
         remaining-args (rest args)]
-    (cond (or (= command "help") (= command "-h") (= command "--help"))
-            (do (println (help-text)) {:success true, :result :help-displayed})
-          (or (empty? args) (nil? command))
-            (do (println (help-text)) {:success true, :result :help-displayed})
-          :else
-            (let [result
-                    (dispatch-command command remaining-args command-registry)]
-              ;; Handle side effects and errors appropriately
-              (cond
-                ;; Success case
-                (:success result) result
-                ;; Error cases
-                (:error result)
-                  (do (println (:message result))
-                      ;; Show help for unknown commands
-                      (when (= :show-help (get-in result [:context :action]))
-                        (println)
-                        (println (help-text)))
-                      ;; Exit with appropriate code
-                      (let [action (get-in result
-                                           [:context :action]
-                                           :exit-with-error)]
-                        (System/exit (if (= action :exit-gracefully) 0 1))))
-                ;; Fallback
-                :else result)))))
+    (cond
+      (or (= command "help") (= command "-h") (= command "--help"))
+        (do (println (help-text)) {:success true, :result :help-displayed})
+      (or (empty? args) (nil? command))
+        (do (println (help-text)) {:success true, :result :help-displayed})
+      :else
+        (let [result (dispatch-command command remaining-args command-registry)]
+          ;; Handle side effects and errors appropriately
+          (cond
+            ;; Success case with side effects
+            (and (:success result) (:side-effect result))
+              (let [side-effect (:side-effect result)]
+                (case (:type side-effect)
+                  :creation-success
+                    (let [issue-key (:issue-key side-effect)
+                          sprint-info (:sprint-info side-effect)
+                          sprint-result (:sprint-result side-effect)
+                          jira-config (-> (config/load-config)
+                                          :jira)
+                          base-url (:base-url jira-config)]
+                      ;; Display sprint info before creation if found
+                      (when sprint-info
+                        (println (str "Found 1 active sprint: "
+                                      (get-in sprint-info [:sprint :name]))))
+                      (println "Creating story...")
+                      (println (str "Created ticket: " issue-key))
+                      (when base-url
+                        (println (str "URL: " base-url "/browse/" issue-key)))
+                      ;; Display sprint assignment result
+                      (when (and sprint-result (:success sprint-result))
+                        (case (get-in sprint-result [:result :action])
+                          :added-to-sprint
+                            (println (str "Added to sprint: "
+                                          (get-in sprint-info [:sprint :name])))
+                          :no-sprint (println "No active sprint found")
+                          nil)))
+                  ;; Default - no side effect handling needed
+                  nil)
+                result)
+            ;; Success case without side effects
+            (:success result) result
+            ;; Error cases
+            (:error result)
+              (do (println (:message result))
+                  ;; Show help for unknown commands
+                  (when (= :show-help (get-in result [:context :action]))
+                    (println)
+                    (println (help-text)))
+                  ;; Exit with appropriate code
+                  (let [action
+                          (get-in result [:context :action] :exit-with-error)]
+                    (System/exit (if (= action :exit-gracefully) 0 1))))
+            ;; Fallback
+            :else result)))))
