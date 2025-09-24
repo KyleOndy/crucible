@@ -91,9 +91,9 @@
                         jira-config
                         (str "  sprints count: " (count sprints)))
       (config/debug-log :jira jira-config (str "  method variable: " method))
-      (cond (= 1 (count sprints)) ({:success true,
-                                    :result {:sprint (first sprints),
-                                             :method method}})
+      (cond (= 1 (count sprints)) {:success true,
+                                   :result {:sprint (first sprints),
+                                            :method method}}
             (> (count sprints) 1) {:success true,
                                    :result {:sprint (first sprints),
                                             :method method}}

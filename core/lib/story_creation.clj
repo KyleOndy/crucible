@@ -94,9 +94,9 @@
   "Apply AI enhancement to ticket content if enabled"
   [initial-data flags ai-config]
   (let [{:keys [ai no-ai ai-only]} flags
-        ai-enabled (and (not no-ai)
-                        (or ai ai-only (:enabled ai-config false))
-                        (:gateway-url ai-config))]
+        ai-enabled (boolean (and (not no-ai)
+                                 (or ai ai-only (:enabled ai-config false))
+                                 (:gateway-url ai-config)))]
     (if ai-enabled (ai/enhance-content initial-data ai-config) initial-data)))
 
 (defn handle-ai-review

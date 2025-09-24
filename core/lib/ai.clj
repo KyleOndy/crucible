@@ -285,12 +285,12 @@
                                    (:title_and_description vars))}])
         ;; Create a simple prompt string from the messages (take the last
         ;; user message)
-        prompt (->>
-                 messages
-                 (filter #(= "user" (:role %)))
-                 last
-                 :content
-                 (or (str (:prompt vars) "\n\n" (:title_and_description vars))))
+        user-content (->> messages
+                          (filter #(= "user" (:role %)))
+                          last
+                          :content)
+        prompt (or user-content
+                   (str (:prompt vars) "\n\n" (:title_and_description vars)))
         ;; Call the core AI function
         result (call-ai-model prompt ai-config)]
     (if (:success result)
