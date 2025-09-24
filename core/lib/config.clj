@@ -4,9 +4,11 @@
             [clojure.edn :as edn]
             [clojure.string :as str]))
 
+
 (def default-ai-prompt
   "Default AI prompt when neither :prompt nor :prompt-file is configured"
   "TASK: Rewrite title and description for clarity and professionalism. OUTPUT: Exactly two lines: Title: [enhanced title] Description: [enhanced description]. FORBIDDEN: explanations, rationale, technical details, implementation notes, business impact, examples, or any other text.")
+
 
 (def default-config
   {:jira {:base-url nil,
@@ -16,19 +18,19 @@
           :default-issue-type "Task",
           :default-story-points 1,
           :story-points-field nil, ; Custom field ID for story points (e.g.
-                                   ; "customfield_10002")
+          ;; "customfield_10002")
           :default-fix-version-id nil, ; Fix version ID to set for all
-                                       ; tickets (e.g. "10100")
+          ;; tickets (e.g. "10100")
           :auto-assign-self true,
           :auto-add-to-sprint true,
           :debug false, ; Enable debug logging for Jira API calls and
-                        ; sprint detection
+          ;; sprint detection
           :fallback-board-ids nil,
           :sprint-name-pattern nil,
           :sprint-exclude-statuses ["Done"], ; Statuses to exclude from
-                                             ; sprint tickets list
+          ;; sprint tickets list
           :sprint-show-done-tickets false, ; Override to show all tickets
-                                           ; including Done
+          ;; including Done
           :custom-fields {}}, ; Map of custom field IDs to values
    ;; Unified sprint detection configuration
    :sprint {:enabled true,
@@ -39,7 +41,7 @@
             :detection-strategies [:project-wide :fallback-boards
                                    :pattern-matching],
             :timeout-ms 10000},
-   :ai {:enabled false,
+   :ai {:enabled true, ; AI enhancement enabled by default
         :debug false, ; Enable debug logging for AI API calls
         :gateway-url nil,
         :api-key nil,
@@ -47,16 +49,16 @@
         :max-tokens 1024,
         :timeout-ms 5000,
         :prompt nil, ; Default prompt (set via prompt-file or falls back to
-                     ; built-in)
+        ;; built-in)
         :prompt-file nil, ; Path to external prompt file (alternative to
-                          ; :prompt)
+        ;; :prompt)
         ;; Response parsing paths - can be customized for different AI
         ;; providers Defaults to common response structures (defined in
         ;; lib.ai/default-response-paths)
         :response-paths nil, ; Override if provider uses non-standard
-                             ; response format
-        ;; Message template for API requests - customize roles and content
-        ;; as needed. Available variables: {prompt}, {title},
+        ;; response format. Message template for API requests - customize
+        ;; roles and content as needed. Available variables: {prompt},
+        ;; {title},
         ;; {description},
         ;; {title_and_description}
         :message-template [{:role "assistant", :content "{prompt}"}
@@ -70,31 +72,26 @@
                :prompts-dir "prompts"},
    :daily-workflow {:start-day {:enabled true,
                                 :max-look-back-days 7, ; How far back to
-                                                       ; look for last log
+                                ;; look for last log
                                 :gather-jira-context true, ; Pull recent Jira
-                                                           ; activity
+                                ;; activity
                                 :carry-forward-tasks true, ; Include
-                                                           ; uncompleted
-                                                           ; tasks
+                                ;; uncompleted
+                                ;; tasks
                                 :show-sprint-status true, ; Include current
-                                                          ; sprint info
+                                ;; sprint info
                                 :jira-activity-days 5, ; How many days of
-                                                       ; Jira history to
-                                                       ; fetch
+                                ;; Jira history to
+                                ;; fetch
                                 :jira-exclude-own-activity true, ; Hide your
-                                                                 ; own changes
+                                ;; own changes
                                 :jira-activity-types ["status" "assignee"
                                                       "priority" "resolution"], ; Activity
-                                                                                ; types
-                                                                                ; to
-                                                                                ; show
+                                ;; types to show
                                 :jira-max-activities 10}}, ; Maximum number
-                                                           ; of activities to
-                                                           ; display ; How
-                                                           ; many days of
-                                                           ; Jira history to
-                                                           ; fetch
+   ;; of activities to display ; How many days of. Jira history to fetch
    :editor nil})
+
 
 (defn expand-path
   "Expand ~ to user home directory"
@@ -106,6 +103,7 @@
     (if (str/starts-with? path "~")
       (str (System/getProperty "user.home") (subs path 1))
       path)))
+
 
 (defn check-pass-command-availability
   "I/O function to check if pass command is available"
@@ -119,6 +117,7 @@
          {:error :pass-check-failed,
           :message "Failed to check pass command availability",
           :context {:exception (.getMessage e)}})))
+
 
 (defn execute-pass-command
   "I/O function to execute pass command and retrieve password"
@@ -137,6 +136,7 @@
          {:error :pass-execution-failed,
           :message "Unexpected error executing pass command",
           :context {:pass-path pass-path, :exception (.getMessage e)}})))
+
 
 (defn format-pass-error-message
   "Pure function to format detailed error messages for pass failures"
@@ -176,6 +176,7 @@
                      "To debug:\n"
                      "  pass show "
                      pass-path))))
+
 
 (defn resolve-pass-value
   "Resolve a pass: prefixed value using decomposed I/O functions"
@@ -229,6 +230,7 @@
                            :error-type (:error availability-check)})))))
     value))
 
+
 (defn resolve-pass-references
   "Recursively resolve all pass: references in the config"
   [config]
@@ -236,6 +238,7 @@
           (into {} (map (fn [[k v]] [k (resolve-pass-references v)]) config))
         (string? config) (resolve-pass-value config)
         :else config))
+
 
 (defn deep-merge
   "Deep merge two maps, with m2 values taking precedence"
@@ -248,6 +251,7 @@
     ;; Otherwise use m1
     :else m1))
 
+
 (defn read-file-content
   "I/O function to read file content with structured error handling"
   [path]
@@ -259,6 +263,7 @@
             :context {:path path, :exception (.getMessage e)}}))
     {:success true, :result nil}))
 
+
 (defn parse-edn-content
   "Pure function to parse EDN content"
   [content path]
@@ -268,6 +273,7 @@
            {:error :edn-parse-failed,
             :message "Failed to parse EDN content",
             :context {:path path, :exception (.getMessage e)}}))))
+
 
 (defn load-edn-file
   "Load and parse an EDN file using decomposed I/O functions, returning nil if it doesn't exist"
@@ -291,6 +297,7 @@
       (let [error-context (:context read-result)]
         (throw (ex-info (:message read-result) error-context))))))
 
+
 (defn resolve-prompt-file-path
   "Resolve prompt file path - absolute, home-relative, or relative to prompts-dir"
   [prompt-file-path config]
@@ -303,6 +310,7 @@
       ;; Relative path - resolve against prompts-dir
       :else (str (fs/path (get-in config [:workspace :prompts-dir])
                           prompt-file-path)))))
+
 
 (defn load-prompt-file
   "Load prompt text from external file using decomposed I/O functions"
@@ -325,6 +333,7 @@
                            :original-path prompt-file-path,
                            :error (:exception error-context)})))))))
 
+
 (defn load-home-config
   "Load config from user's home directory (XDG standard location)"
   []
@@ -333,10 +342,12 @@
         xdg-config-path (str (fs/path xdg-config-home "crucible" "config.edn"))]
     (load-edn-file xdg-config-path)))
 
+
 (defn load-project-config
   "Load config from current project directory"
   []
   (load-edn-file "crucible.edn"))
+
 
 (defn get-env-override
   "Get environment variable override for a config path"
@@ -351,6 +362,7 @@
                  (get env-map "CRUCIBLE_WORKSPACE_DIR"))
     :editor (get env-map "EDITOR")
     nil))
+
 
 (defn apply-env-overrides
   "Apply environment variable overrides to config"
@@ -367,6 +379,7 @@
                    #(or (get-env-override env-map [:workspace :root-dir]) %))
         (update :editor #(or (get-env-override env-map [:editor]) %)))))
 
+
 (defn expand-workspace-paths
   "Expand workspace paths to absolute paths"
   [config]
@@ -379,6 +392,7 @@
         (update-in [:workspace :docs-dir] #(when % (str (fs/path root-dir %))))
         (update-in [:workspace :prompts-dir]
                    #(when % (str (fs/path root-dir %)))))))
+
 
 (defn normalize-sprint-config
   "Normalize sprint configuration to use new unified format with backward compatibility.
@@ -406,6 +420,7 @@
     ;; Return config with normalized sprint section
     (assoc config :sprint normalized-sprint)))
 
+
 (defn resolve-prompt-files
   "Resolve external prompt files in AI config"
   [config]
@@ -419,7 +434,7 @@
                  (-> config
                      (assoc-in [:ai :prompt] loaded-prompt)
                      (assoc-in [:ai :prompt-file] prompt-file))) ; Keep file
-               ; path for debugging
+               ;; path for debugging
                (catch Exception e
                  (throw (ex-info (str "Error loading prompt file: "
                                       (.getMessage e))
@@ -429,6 +444,7 @@
         ;; Neither prompt nor prompt-file configured - use default
         :else (assoc-in config [:ai :prompt] default-ai-prompt)))
     config))
+
 
 (defn load-config
   "Load configuration from all sources with proper precedence"
@@ -441,6 +457,7 @@
       expand-workspace-paths
       normalize-sprint-config
       resolve-prompt-files))
+
 
 (defn validate-jira-config
   "Validate that required Jira configuration is present"
@@ -460,6 +477,7 @@
              "Missing Jira API token (set in config file or CRUCIBLE_JIRA_TOKEN)"))]
     (when (seq errors) errors)))
 
+
 (defn config-locations
   "Return a string describing where config files are loaded from"
   []
@@ -467,6 +485,7 @@
        "  1. ./crucible.edn (project-specific)\n"
          "  2. ~/.config/crucible/config.edn (user config)\n"
        "  3. Environment variables (CRUCIBLE_*)\n" "  4. Built-in defaults"))
+
 
 (defn get-config-file-status
   "Get the actual status of config files and their paths"
@@ -484,6 +503,7 @@
                   :readable (and (fs/exists? xdg-path)
                                  (fs/readable? xdg-path))}}))
 
+
 (defn get-env-var-status
   "Get status of relevant environment variables"
   []
@@ -498,6 +518,7 @@
                                       val))}])
             env-vars))))
 
+
 (defn ensure-single-directory
   "I/O function to ensure a single directory exists with structured result"
   [dir-path]
@@ -508,6 +529,7 @@
          (catch Exception e
            {:error :directory-creation-failed,
             :context {:path dir-path, :exception (.getMessage e)}}))))
+
 
 (defn build-directory-results
   "Pure function to build directory creation results map"
@@ -530,6 +552,7 @@
                                                "Unknown error")}))))
          {})))
 
+
 (defn ensure-workspace-directories
   "Create missing workspace directories using decomposed I/O functions"
   [workspace-config]
@@ -543,6 +566,7 @@
     (build-directory-results directories
                              workspace-config
                              ensure-single-directory)))
+
 
 (defn check-workspace-directories
   "Check which workspace directories are missing and return summary"
@@ -563,6 +587,7 @@
                                 :path (get workspace-config dir-key),
                                 :description desc})))}))
 
+
 (defn terminal-supports-color?
   "Check if the terminal supports color output"
   []
@@ -577,6 +602,7 @@
                                (str/includes? term "screen")
                                (str/includes? term "tmux")))))))))
 
+
 (def color-codes
   "ANSI color codes for terminal output"
   {:red "\033[31m",
@@ -584,6 +610,7 @@
    :green "\033[32m",
    :blue "\033[34m",
    :reset "\033[0m"})
+
 
 (defn colorize
   "Apply color to text if terminal supports it"
@@ -598,13 +625,18 @@
     (str (get color-codes color "") text (get color-codes :reset ""))
     text))
 
+
 (defn red [text] (colorize text :red))
+
 
 (defn yellow [text] (colorize text :yellow))
 
+
 (defn green [text] (colorize text :green))
 
+
 (defn blue [text] (colorize text :blue))
+
 
 ;; ASCII status indicators with optional color
 
@@ -613,20 +645,24 @@
   [text]
   (str (green "[OK]") " " text))
 
+
 (defn format-error
   "Format error indicator with optional color"
   [text]
   (str (red "[ERR]") " " text))
+
 
 (defn format-warning
   "Format warning indicator with optional color"
   [text]
   (str (yellow "[WARN]") " " text))
 
+
 (defn format-info
   "Format info indicator with optional color"
   [text]
   (str (blue "[INFO]") " " text))
+
 
 (defn debug-log
   "Log a debug message to stderr with timestamp if debug is enabled for the section"
@@ -638,6 +674,7 @@
           section-name (str/upper-case (name section))]
       (binding [*out* *err*]
         (println (str "[" timestamp "] [" section-name "-DEBUG] " message))))))
+
 
 (defn print-config-error
   "Print a configuration error with helpful context"
@@ -651,6 +688,7 @@
   (println "{:jira {:base-url \"https://company.atlassian.net\"")
   (println "        :username \"user@company.com\"")
   (println "        :api-token \"pass:work/jira-token\"}}"))
+
 
 (defn apply-debug-flags
   "Apply debug flags to config, overriding file-based settings"

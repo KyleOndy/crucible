@@ -29,7 +29,7 @@
   (let [{:keys [args flags]} (cli/parse-flags args)
         summary (first args)
         {:keys [editor dry-run file ai no-ai ai-only desc list-drafts
-                clean-drafts recover]}
+                clean-drafts recover no-review]}
           flags]
     ;; Handle draft management commands first
     (if-let [draft-result (draft-management/process-draft-commands

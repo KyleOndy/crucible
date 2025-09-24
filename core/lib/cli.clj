@@ -1,5 +1,5 @@
 (ns lib.cli
-  "CLI infrastructure for command parsing, help text, and dispatch"
+    "CLI infrastructure for command parsing, help text, and dispatch"
   (:require [clojure.string :as str]
             [lib.config :as config]
             [lib.daily-log :as daily-log]
@@ -9,18 +9,20 @@
 
 (defn help-text
   []
-  (str "Crucible - SRE productivity system\n\n"
-       "Commands:\n" "  help              Show this help\n"
-       "  doctor            System health check\n"
-         "  init-prompt       Initialize AI prompt template\n"
-       "  inspect-ticket <id> View ticket fields\n"
-         "  l                 Open daily log\n"
-       "  sd                Start day (enhanced log)\n"
-         "  pipe [command]    Pipe stdin to log\n"
-       "  qs <summary>      Create Jira story\n\n" "Quick Story Options:\n"
-       "  -e, --editor      Open editor\n" "  -f, --file <file> From file\n"
-       "  --dry-run         Preview only\n" "  --ai              Enable AI\n"
-       "  --no-ai           Disable AI\n" "  --ai-only         AI test only\n"
+  (str "Crucible - SRE productivity system\n\n" "Commands:\n"
+       "  help              Show this help\n"
+         "  doctor            System health check\n"
+       "  init-prompt       Initialize AI prompt template\n"
+         "  inspect-ticket <id> View ticket fields\n"
+       "  l                 Open daily log\n"
+         "  sd                Start day (enhanced log)\n"
+       "  pipe [command]    Pipe stdin to log\n"
+         "  qs <summary>      Create Jira story\n\n"
+       "Quick Story Options:\n" "  -e, --editor      Open editor\n"
+       "  -f, --file <file> From file\n" "  --dry-run         Preview only\n"
+       "  --ai              Enable AI\n" "  --ai-only         AI-only mode\n"
+       "  --no-review       Skip AI review editor\n"
+         "  -d, --desc <text> Description\n"
        "  --list-drafts     Show drafts\n" "  --recover <file>  Recover draft\n"
        "  --clean-drafts    Clean old drafts\n\n" "Debug Options:\n"
        "  --debug           Enable all debug modes\n"
@@ -73,6 +75,9 @@
                                            (assoc-in [:flags :clean-drafts]
                                                      true)
                                            (update :remaining rest))
+              (= arg "--no-review") (-> acc
+                                        (assoc-in [:flags :no-review] true)
+                                        (update :remaining rest))
               ;; Flags that require values
               (#{"-f" "--file"} arg)
                 (if-let [value (second remaining)]

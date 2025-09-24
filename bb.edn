@@ -30,7 +30,7 @@
                                                      '(println "Port written to .nrepl-port file")
                                                      '(println "PID written to .nrepl-pid file")
                                                      '(deref (promise))))))]
-             (Thread/sleep 1000) ; Give server time to start
+             (Thread/sleep 3000) ; Give server time to start
              (if (fs/exists? ".nrepl-port")
                (do
                  (println (str "nREPL server started on port " port))
