@@ -4,6 +4,17 @@
             [cheshire.core :as json]
             [clojure.string :as str]))
 
+(def default-response-paths
+  "Default paths to try when extracting content from AI responses"
+  [[:choices 0 :message :content] ; OpenAI/OpenRouter
+   [:context 0 :text] ; Alternative format
+   [:content 0 :text] ; Anthropic/Claude format
+   [:data :text] ; Generic format
+   [:response :content] ; Another generic format
+   [:message :content] ; Simple message format
+   [:text] ; Direct text
+   [:content]]) ; Direct content
+
 (defn substitute-template-vars
   "Replace template variables in a string with actual values"
   [template vars]
@@ -73,15 +84,7 @@
   "Extract content from AI response using multiple possible paths"
   [response-body config]
   (let [parsed (json/parse-string response-body true)
-        paths (or (:response-paths config)
-                  [[:choices 0 :message :content] ; OpenAI/OpenRouter
-                   [:content 0 :text] ; Anthropic/Claude format
-                   [:context 0 :text] ; Alternative format
-                   [:data :text] ; Generic format
-                   [:response :content] ; Another generic format
-                   [:message :content] ; Simple message format
-                   [:text] ; Direct text
-                   [:content]]) ; Direct content
+        paths (or (:response-paths config) default-response-paths)
         extracted-content (some #(get-in parsed %) paths)]
     (when (:debug config)
       (println "\n=== DEBUG: Content Extraction ===")
