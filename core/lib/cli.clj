@@ -1,5 +1,5 @@
 (ns lib.cli
-    "CLI infrastructure for command parsing, help text, and dispatch"
+  "CLI infrastructure for command parsing, help text, and dispatch"
   (:require [clojure.string :as str]
             [lib.config :as config]
             [lib.daily-log :as daily-log]
