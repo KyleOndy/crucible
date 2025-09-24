@@ -1,0 +1,24 @@
+# direnv cache (nix+direnv)
+.direnv/
+
+# REPL artifacts
+.nrepl-port
+.nrepl-pid
+.lsp/
+.clj-kondo/
+.calva/
+.cpcache/
+pom.xml
+
+# Logs
+logs/
+
+# Workspace directory (contains sensitive data)
+workspace/
+
+# MCP
+.clojure-mcp/
+
+# Local configuration (may contain credentials)
+crucible.edn
+temp/

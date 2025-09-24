@@ -1,0 +1,280 @@
+{:paths ["core" "test"]
+ :deps {nrepl/nrepl {:mvn/version "1.0.0"}
+        cider/cider-nrepl {:mvn/version "0.42.1"}
+        org.babashka/cli {:mvn/version "0.7.53"}}
+
+ :tasks
+ {:requires ([babashka.fs :as fs]
+             [babashka.nrepl.server :as srv]
+             [babashka.process :as p]
+             [clojure.string :as str])
+
+  nrepl
+  {:doc "Start nREPL server for MCP integration (in background)"
+   :task (do
+           (println "Starting nREPL server for MCP integration...")
+           (fs/create-dirs "logs")
+           (let [port (+ 40000 (rand-int 10000)) ; Random port in range 40000-50000
+                 log-file (fs/file "logs" "nrepl.log")
+                 proc (p/process {:out log-file
+                                  :err log-file
+                                  :shutdown p/destroy-tree}
+                                 "bb" "-e"
+                                 (pr-str (list 'do
+                                               '(require '[babashka.nrepl.server :as srv])
+                                               (list 'let ['server (list 'srv/start-server! {:host "localhost"
+                                                                                             :port port})]
+                                                     (list 'spit ".nrepl-port" (str port))
+                                                     '(spit ".nrepl-pid" (str (.pid (java.lang.ProcessHandle/current))))
+                                                     (list 'println (str "nREPL server started on port " port))
+                                                     '(println "Port written to .nrepl-port file")
+                                                     '(println "PID written to .nrepl-pid file")
+                                                     '(deref (promise))))))]
+             (Thread/sleep 1000) ; Give server time to start
+             (if (fs/exists? ".nrepl-port")
+               (do
+                 (println (str "nREPL server started on port " port))
+                 (println "Logs are being written to logs/nrepl.log"))
+               (println "Failed to start nREPL server - check logs/nrepl.log"))))}
+
+  dev:start
+  {:doc "Start development environment"
+   :task (do
+           (println "Starting Crucible development environment...")
+           (run 'nrepl))}
+
+  dev:stop
+  {:doc "Stop development environment"
+   :task (do
+           (println "Stopping Crucible development environment...")
+           (if (fs/exists? ".nrepl-pid")
+             (let [pid (slurp ".nrepl-pid")]
+               (try
+                 (p/destroy-tree {:pid (parse-long pid)})
+                 (println "nREPL server stopped")
+                 (catch Exception e
+                   (println "Failed to stop nREPL server:" (.getMessage e))))
+               (fs/delete ".nrepl-pid")
+               (fs/delete-if-exists ".nrepl-port")
+               (println "Cleaned up nREPL artifacts"))
+             (println "No nREPL server running")))}
+
+  clean
+  {:doc "Clean REPL artifacts"
+   :task (do
+           (when (fs/exists? ".nrepl-port")
+             (fs/delete ".nrepl-port")
+             (println "Cleaned .nrepl-port"))
+           (when (fs/exists? ".nrepl-pid")
+             (fs/delete ".nrepl-pid")
+             (println "Cleaned .nrepl-pid")))}
+
+  test:result
+  {:doc "Run error handling (result) tests only"
+   :extra-paths ["test"]
+   :extra-deps {io.github.cognitect-labs/test-runner {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
+   :task (exec 'cognitect.test-runner.api/test)
+   :exec-args {:nses [test-result-test]}
+   :org.babashka/cli {:coerce {:nses [:symbol] :vars [:symbol]}}}
+
+  test
+  {:doc "Run all unit tests using cognitect test runner"
+   :extra-paths ["test"]
+   :extra-deps {io.github.cognitect-labs/test-runner {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
+   :task (exec 'cognitect.test-runner.api/test)
+   :exec-args {:dirs ["test"]}
+   :org.babashka/cli {:coerce {:nses [:symbol] :vars [:symbol]}}}
+
+  test:adf
+  {:doc "Run ADF library tests only"
+   :extra-paths ["test"]
+   :extra-deps {io.github.cognitect-labs/test-runner {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
+   :task (exec 'cognitect.test-runner.api/test)
+   :exec-args {:nses [lib.adf-test]}
+   :org.babashka/cli {:coerce {:nses [:symbol] :vars [:symbol]}}}
+
+  test:by-namespace
+  {:doc "Run tests for specific namespace(s) - Usage: bb test:by-namespace --nses namespace1 namespace2"
+   :extra-paths ["test"]
+   :extra-deps {io.github.cognitect-labs/test-runner {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
+   :task (exec 'cognitect.test-runner.api/test)
+   :org.babashka/cli {:coerce {:nses [:symbol] :vars [:symbol]}}}
+
+  ;; === CRUCIBLE USER-FACING COMMANDS ===
+
+  crucible
+  {:doc "Main Crucible CLI dispatcher"
+   :task (load-file "core/bin/crucible.clj")}
+
+  ;; Convenience aliases for common commands
+  l
+  {:doc "Open daily log (alias for: crucible l)"
+   :task (apply shell "bb" "crucible" "l" *command-line-args*)}
+
+  pipe
+  {:doc "Pipe stdin to daily log (alias for: crucible pipe)"
+   :task (apply shell "bb" "crucible" "pipe" *command-line-args*)}
+
+  work-on
+  {:doc "Start working on a ticket (alias for: crucible work-on <ticket>)"
+   :task (if-let [ticket (first *command-line-args*)]
+           (shell (str "bb crucible work-on " ticket))
+           (println "Usage: bb work-on <ticket-id>"))}
+
+  qs
+  {:doc "Create a quick Jira story (alias for: crucible quick-story)"
+   :task (apply shell "bb" "crucible" "qs" *command-line-args*)}
+
+  sd
+  {:doc "Start your day with enhanced context (alias for: crucible start-day)"
+   :task (shell "bb crucible start-day")}
+
+  doctor
+  {:doc "Comprehensive system health check (alias for: crucible doctor)"
+   :task (shell "bb crucible doctor")}
+
+  ;; === CODE QUALITY TASKS ===
+
+  lint
+  {:doc "Run clj-kondo on all Clojure source files"
+   :task (do
+           (println "Running clj-kondo on all Clojure files...")
+           (let [result (p/shell {:continue true} "clj-kondo" "--lint" "core" "test")]
+             (if (zero? (:exit result))
+               (println "✅ All clj-kondo checks passed")
+               (do
+                 (println "❌ clj-kondo found issues")
+                 (System/exit 1)))))}
+
+  lint:check
+  {:doc "Run clj-kondo on changed files only"
+   :task (do
+           (let [changed-files (-> (p/shell {:out :string} "git" "diff" "--name-only" "HEAD")
+                                   :out
+                                   str/trim)
+                 clojure-files (when (seq changed-files)
+                                 (->> (str/split-lines changed-files)
+                                      (filter (fn [f] (some (fn [ext] (str/ends-with? f ext)) [".clj" ".cljs" ".cljc" ".edn"])))))]
+             (if (seq clojure-files)
+               (do
+                 (println "Running clj-kondo on changed files:" (str/join " " clojure-files))
+                 (let [result (apply p/shell {:continue true} "clj-kondo" "--lint" clojure-files)]
+                   (if (zero? (:exit result))
+                     (println "✅ All clj-kondo checks passed")
+                     (do
+                       (println "❌ clj-kondo found issues")
+                       (System/exit 1)))))
+               (println "No changed Clojure files to lint"))))}
+
+  format:check
+  {:doc "Check Clojure formatting with zprint"
+   :task (do
+           (println "Checking Clojure formatting...")
+           (let [clojure-files (->> (concat
+                                     (map str (fs/glob "core" "**/*.{clj,cljs,cljc,edn}"))
+                                     (map str (fs/glob "test" "**/*.{clj,cljs,cljc,edn}")))
+                                    (remove (fn [f] (str/includes? f ".direnv"))))
+                 issues (atom [])]
+             (doseq [file clojure-files]
+               (let [original (slurp file)
+                     formatted (:out (p/shell {:out :string :in original} "zprint"))]
+                 (when (not= original formatted)
+                   (swap! issues conj file))))
+             (if (empty? (deref issues))
+               (println "✅ All formatting checks passed")
+               (do
+                 (println "❌ Formatting issues found in files:")
+                 (doseq [file (deref issues)] (println " " file))
+                 (System/exit 1)))))}
+
+  format:fix
+  {:doc "Auto-fix Clojure formatting with zprint"
+   :task (do
+           (println "Fixing Clojure formatting...")
+           (let [clojure-files (->> (concat
+                                     (map str (fs/glob "core" "**/*.{clj,cljs,cljc,edn}"))
+                                     (map str (fs/glob "test" "**/*.{clj,cljs,cljc,edn}")))
+                                    (remove (fn [f] (str/includes? f ".direnv"))))
+                 fixed (atom [])]
+             (doseq [file clojure-files]
+               (let [original (slurp file)
+                     formatted (:out (p/shell {:out :string :in original} "zprint"))]
+                 (when (not= original formatted)
+                   (spit file formatted)
+                   (swap! fixed conj file))))
+             (if (empty? (deref fixed))
+               (println "✅ No formatting changes needed")
+               (do
+                 (println "✅ Formatting fixed in files:")
+                 (doseq [file (deref fixed)] (println " " file))))))}
+
+  lint:all
+  {:doc "Run all code quality checks (clj-kondo + formatting)"
+   :task (do
+           (println "Running all code quality checks...")
+           (run 'lint)
+           (run 'format:check)
+           (println "✅ All code quality checks passed"))}
+
+  ;; === DEVELOPMENT REPL TASKS ===
+
+  debug-repl
+  {:doc "Start nREPL server for remote debugging"
+   :override-builtin true
+   :task (do
+           (println "Starting nREPL server on port 7888...")
+           (srv/start-server! {:host "localhost" :port 7888})
+           (println "Connect with your editor to localhost:7888")
+           (deref (promise)))}
+
+  dev-repl
+  {:doc "Start development REPL with crucible loaded"
+   :requires ([lib.config :as config]
+              [lib.adf :as adf]
+              [lib.jira :as jira]
+              [lib.daily_log :as daily-log])
+   :task (do
+           (println "Starting nREPL server on port 7889...")
+           (srv/start-server! {:host "localhost" :port 7889})
+           (println "Connect with your editor to localhost:7889")
+           (println "All Crucible namespaces loaded and ready for debugging")
+           (deref (promise)))}
+
+  ;; Clojure nREPL tasks for MCP integration
+  clj-nrepl:start
+  {:doc "Start Clojure nREPL server for MCP (background, random port)"
+   :task (do
+           (if (fs/exists? ".nrepl-port")
+             (println "Clojure nREPL already running on port" (str/trim (slurp ".nrepl-port")))
+             (do
+               (println "Starting Clojure nREPL server...")
+               (p/process {:out :inherit
+                           :err :inherit}
+                          "clojure" "-M:nrepl")
+               (Thread/sleep 2000)
+               (if (fs/exists? ".nrepl-port")
+                 (println "Clojure nREPL started on port" (str/trim (slurp ".nrepl-port")))
+                 (println "Failed to start Clojure nREPL server")))))}
+
+  clj-nrepl:stop
+  {:doc "Stop Clojure nREPL server"
+   :task (do
+           (if (fs/exists? ".nrepl-port")
+             (let [port (str/trim (slurp ".nrepl-port"))]
+               (println "Stopping Clojure nREPL on port" port)
+               (try
+                 (p/shell "pkill" "-f" (str "clojure.*:nrepl.*port.*" port))
+                 (catch Exception e
+                   (try
+                     (p/shell "pkill" "-f" "clojure.*-M:nrepl")
+                     (catch Exception e2
+                       (println "Could not find Clojure nREPL process")))))
+               (fs/delete ".nrepl-port")
+               (println "Clojure nREPL stopped"))
+             (println "No Clojure nREPL running")))}
+
+  clj-nrepl:status
+  {:doc "Check Clojure nREPL server status"
+   :task (if (fs/exists? ".nrepl-port")
+           (println "Clojure nREPL running on port" (str/trim (slurp ".nrepl-port")))
+           (println "No Clojure nREPL running"))}}}

@@ -1,0 +1,14 @@
+{
+  "default": true,
+  "MD024": {
+    "siblings_only": true
+  },
+  "MD013": false,
+  "MD022": true,
+  "MD025": true,
+  "MD026": true,
+  "MD033": false,
+  "MD034": false,
+  "MD040": false,
+  "MD041": false
+}
