@@ -286,23 +286,43 @@
       (let [error-context (:context read-result)]
         (throw (ex-info (:message read-result) error-context))))))
 
+(defn resolve-prompt-file-path
+  "Resolve prompt file path - absolute, home-relative, or relative to prompts-dir"
+  [prompt-file-path config]
+  (when prompt-file-path
+    (cond
+      ;; Absolute path - use as-is
+      (str/starts-with? prompt-file-path "/")
+      prompt-file-path
+
+      ;; Home directory path - expand ~
+      (str/starts-with? prompt-file-path "~")
+      (expand-path prompt-file-path)
+
+      ;; Relative path - resolve against prompts-dir
+      :else
+      (str (fs/path (get-in config [:workspace :prompts-dir])
+                    prompt-file-path)))))
+
 (defn load-prompt-file
   "Load prompt text from external file using decomposed I/O functions"
-  [prompt-file-path]
+  [prompt-file-path config]
   (when prompt-file-path
-    (let [expanded-path (expand-path prompt-file-path)
+    (let [resolved-path (resolve-prompt-file-path prompt-file-path config)
           ;; I/O: Read file content (reusing existing function)
-          read-result (read-file-content expanded-path)]
+          read-result (read-file-content resolved-path)]
       (if (:success read-result)
         (if-let [content (:result read-result)]
           content
           ;; File doesn't exist
-          (throw (ex-info (str "Prompt file not found: " expanded-path)
-                          {:path expanded-path})))
+          (throw (ex-info (str "Prompt file not found: " resolved-path)
+                          {:path resolved-path
+                           :original-path prompt-file-path})))
         ;; Handle read errors
         (let [error-context (:context read-result)]
-          (throw (ex-info (str "Failed to read prompt file: " expanded-path)
-                          {:path expanded-path,
+          (throw (ex-info (str "Failed to read prompt file: " resolved-path)
+                          {:path resolved-path
+                           :original-path prompt-file-path
                            :error (:exception error-context)})))))))
 
 (defn load-home-config
@@ -353,9 +373,14 @@
   (let [root-dir (expand-path (get-in config [:workspace :root-dir]))]
     (-> config
         (assoc-in [:workspace :root-dir] root-dir)
-        (update-in [:workspace :logs-dir] #(str (fs/path root-dir %)))
-        (update-in [:workspace :tickets-dir] #(str (fs/path root-dir %)))
-        (update-in [:workspace :docs-dir] #(str (fs/path root-dir %))))))
+        (update-in [:workspace :logs-dir]
+                   #(when % (str (fs/path root-dir %))))
+        (update-in [:workspace :tickets-dir]
+                   #(when % (str (fs/path root-dir %))))
+        (update-in [:workspace :docs-dir]
+                   #(when % (str (fs/path root-dir %))))
+        (update-in [:workspace :prompts-dir]
+                   #(when % (str (fs/path root-dir %)))))))
 
 (defn normalize-sprint-config
   "Normalize sprint configuration to use new unified format with backward compatibility.
@@ -391,7 +416,7 @@
       (cond
         ;; Load from external file (prompt-file takes precedence)
         (and prompt-file (not (str/blank? prompt-file)))
-        (try (let [loaded-prompt (load-prompt-file prompt-file)]
+        (try (let [loaded-prompt (load-prompt-file prompt-file config)]
                (-> config
                    (assoc-in [:ai :prompt] loaded-prompt)
                    (assoc-in [:ai :prompt-file] prompt-file))) ; Keep file
