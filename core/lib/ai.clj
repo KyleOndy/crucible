@@ -94,7 +94,7 @@
               (println "\n=== DEBUG: AI Model Call ===")
               (println (str "URL: " (:gateway-url ai-config)))
               (println (str "Model: " (:model request-body)))
-              (println (str "Max tokens: " (:max-tokens request-body)))
+              (println (str "Max tokens: " (:max_tokens request-body)))
               (println (str "Prompt: " prompt))
               (println "\nHeaders:")
               (doseq [[k v] headers]
