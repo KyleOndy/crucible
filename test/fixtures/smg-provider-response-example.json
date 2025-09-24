@@ -1,0 +1,8 @@
+{
+  "role" : "assistant",
+  "content" : [ {
+    "type" : "text",
+    "text" : "{\n \"title\": \"Title here\",\n  \"description\": \"Description goes here\\nsometime newlines.\"\n}"
+  }],
+  "type" : "message"
+}
