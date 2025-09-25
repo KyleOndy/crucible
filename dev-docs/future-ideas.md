@@ -7,6 +7,7 @@ A list of ideas for future dev work
 Get a list of all Jira tickets and Confluence docs that have changed since the last start of day. This would help with staying aware of activity across the organization.
 
 **Implementation thoughts:**
+
 - Query Jira API for tickets updated since last daily log creation timestamp
 - Include tickets where user is assignee, reporter, or watcher
 - Query Confluence API for recently modified pages in watched spaces
@@ -19,6 +20,7 @@ Get a list of all Jira tickets and Confluence docs that have changed since the l
 Pick `n` tickets randomly from "watched" tickets (tickets I have created/watching/commented on) to add to the daily log for review and grooming. This helps with ongoing maintenance of the backlog.
 
 **Implementation thoughts:**
+
 - Build on existing `get-my-recent-activity` function in `lib.jira.activity`
 - Add JQL query for: `(reporter = currentUser() OR watcher = currentUser() OR comment ~ currentUser())`
 - Implement reservoir sampling to get truly random selection
@@ -31,6 +33,7 @@ Pick `n` tickets randomly from "watched" tickets (tickets I have created/watchin
 Add the ability to iterate on the generated story from `c qs` instead of it being a one-shot generation.
 
 **Implementation thoughts:**
+
 - Save the last generated story to a temp file or workspace
 - Add `c qs --iterate` or `c qs -i` flag to load and refine the last story
 - Could support multiple rounds: generate → review → refine → review → create
@@ -43,6 +46,7 @@ Add the ability to iterate on the generated story from `c qs` instead of it bein
 Build a library of reusable ticket templates for common types of work (bug reports, feature requests, investigations, incidents).
 
 **Implementation thoughts:**
+
 - Store templates in `workspace/templates/` or `core/templates/tickets/`
 - Support variables/placeholders that get filled in during creation
 - Command like `c new-ticket --template=incident`
@@ -54,6 +58,7 @@ Build a library of reusable ticket templates for common types of work (bug repor
 Track time spent on tickets and provide analytics about work patterns.
 
 **Implementation thoughts:**
+
 - Already tracking work sessions in daily logs
 - Parse logs to extract session durations
 - Generate weekly/monthly summaries
@@ -65,6 +70,7 @@ Track time spent on tickets and provide analytics about work patterns.
 When piping output to the log, detect patterns and suggest relevant follow-up commands.
 
 **Implementation thoughts:**
+
 - Detect error messages and suggest debugging commands
 - Recognize ticket IDs and offer to open them or start work
 - Pattern match on common outputs (test failures, build errors)
@@ -76,6 +82,7 @@ When piping output to the log, detect patterns and suggest relevant follow-up co
 Similar to quick story (`c qs`), add quick documentation creation that generates and publishes Confluence pages.
 
 **Implementation thoughts:**
+
 - `c docs` command for creating documentation
 - AI-assisted content generation based on prompts
 - Support different doc types: runbooks, post-mortems, design docs
@@ -87,6 +94,7 @@ Similar to quick story (`c qs`), add quick documentation creation that generates
 Perform bulk operations on multiple tickets at once.
 
 **Implementation thoughts:**
+
 - Select tickets by JQL or from a list
 - Operations: bulk assign, bulk label, bulk transition, bulk comment
 - Preview changes before applying
@@ -98,6 +106,7 @@ Perform bulk operations on multiple tickets at once.
 Link git commits and branches to Jira tickets automatically.
 
 **Implementation thoughts:**
+
 - Parse ticket ID from branch names
 - Auto-add ticket ID to commit messages if not present
 - Command to create branch from current ticket: `c branch`
@@ -109,6 +118,7 @@ Link git commits and branches to Jira tickets automatically.
 Cache frequently accessed ticket data locally for offline access and faster operations.
 
 **Implementation thoughts:**
+
 - SQLite database in workspace for ticket metadata
 - Sync on demand or periodically
 - Enable offline ticket viewing and searching
@@ -120,6 +130,7 @@ Cache frequently accessed ticket data locally for offline access and faster oper
 When working on a ticket, get AI assistance for code review before pushing.
 
 **Implementation thoughts:**
+
 - `c review` command that uses git diff
 - Context-aware based on ticket type (bug fix vs feature)
 - Checks for common issues based on ticket description
@@ -129,4 +140,9 @@ When working on a ticket, get AI assistance for code review before pushing.
 ## Git commit message builder / helper
 
 A command that helps generate a git commit message with context and proper spelling and grammar.
+
 - Respects the `.github/pull_request_template.md for formatting.
+
+## Service Desk tickets
+
+Add the ability to submit Jira Service Desk tickets.
