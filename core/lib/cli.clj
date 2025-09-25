@@ -9,17 +9,18 @@
 
 (defn help-text
   []
-  (str "Crucible - SRE productivity system\n\n" "Commands:\n"
-       "  help              Show this help\n"
-         "  doctor            System health check\n"
-       "  init-prompt       Initialize AI prompt template\n"
-         "  inspect-ticket <id> View ticket fields\n"
-       "  l                 Open daily log\n"
-         "  sd                Start day (enhanced log)\n"
-       "  pipe [command]    Pipe stdin to log\n"
-         "  qs <summary>      Create Jira story\n\n"
-       "Quick Story Options:\n" "  -e, --editor      Open editor\n"
-       "  -f, --file <file> From file\n" "  --dry-run         Preview only\n"
+  (str "Crucible - SRE productivity system\n\n"
+       "Commands:\n" "  help              Show this help\n"
+       "  doctor            System health check\n"
+         "  init-prompt       Initialize AI prompt template\n"
+       "  inspect-ticket <id> View ticket fields\n"
+         "  l                 Open daily log\n"
+       "  sd                Start day (enhanced log)\n"
+         "  pipe [command]    Pipe stdin to log\n"
+       "  qs <summary>      Create Jira story\n\n" "Quick Story Options:\n"
+       "  -e, --editor      Open editor\n" "  -f, --file <file> From file\n"
+       "  --dry-run         Preview only\n"
+         "  --iterate         Iterative AI enhancement loop\n"
        "  --ai              Enable AI\n" "  --ai-only         AI-only mode\n"
        "  --no-review       Skip AI review editor\n"
          "  -d, --desc <text> Description\n"
@@ -45,6 +46,9 @@
                                            (update :remaining rest))
               (= arg "--dry-run") (-> acc
                                       (assoc-in [:flags :dry-run] true)
+                                      (update :remaining rest))
+              (= arg "--iterate") (-> acc
+                                      (assoc-in [:flags :iterate] true)
                                       (update :remaining rest))
               (= arg "--ai") (-> acc
                                  (assoc-in [:flags :ai] true)

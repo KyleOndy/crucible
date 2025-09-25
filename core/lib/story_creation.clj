@@ -99,6 +99,65 @@
                                  (:gateway-url ai-config)))]
     (if ai-enabled (ai/enhance-content initial-data ai-config) initial-data)))
 
+(defn prompt-user-action
+  "Prompt user for next action in iterative workflow"
+  [edited-data original-data]
+  (let [content-changed? (not= (:description edited-data)
+                               (:description original-data))]
+    (println (if content-changed?
+               "Content modified. Next action:"
+               "No changes detected. Next action:"))
+    (println "[r] Resubmit to AI for further enhancement")
+    (println "[d] Done - create Jira ticket with current content")
+    (println "[e] Edit again in editor")
+    (println "[q] Quit without creating ticket")
+    (print "Choice (r/d/e/q): ")
+    (flush)
+    (case (str/lower-case (str/trim (read-line)))
+      "r" :resubmit
+      "d" :done
+      "e" :edit-again
+      "q" :quit
+      (do (println "Invalid choice, please try again.")
+          (recur edited-data original-data)))))
+
+(defn iterative-enhancement
+  "Handle iterative AI enhancement with editor loop"
+  [initial-data flags ai-config]
+  (loop [current-data initial-data
+         iteration 1
+         last-ai-data nil]
+    (let [;; AI enhance if iteration > 1 or initial AI requested
+          should-enhance-ai? (or (> iteration 1)
+                                 (:ai flags)
+                                 (:ai-only flags)
+                                 (:enabled ai-config false))
+          enhanced-data (if (and should-enhance-ai? (:gateway-url ai-config))
+                          (ai/enhance-content current-data ai-config)
+                          current-data)
+          ;; Open in editor with iteration context - use ticket-editor for
+          ;; now
+          editor-result (ticket-editor/open-ticket-editor (:title enhanced-data)
+                                                          (:description
+                                                            enhanced-data))
+          ;; Handle editor result
+          edited-data (if (:success editor-result)
+                        (:result editor-result)
+                        {:error :editor-failed,
+                         :message "Editor operation failed",
+                         :context editor-result})]
+      (if (:error edited-data)
+        ;; Return editor error
+        edited-data
+        ;; Prompt user for next action
+        (let [user-choice (prompt-user-action edited-data enhanced-data)]
+          (case user-choice
+            :resubmit (recur edited-data (inc iteration) enhanced-data)
+            :edit-again (recur current-data iteration last-ai-data)
+            :done {:success true, :result edited-data}
+            :quit {:error :user-cancelled,
+                   :message "User cancelled iteration"}))))))
+
 (defn handle-ai-review
   "Handle AI review editor for enhanced content"
   [initial-data enhanced-data flags]
