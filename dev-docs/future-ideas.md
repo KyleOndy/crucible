@@ -125,3 +125,8 @@ When working on a ticket, get AI assistance for code review before pushing.
 - Checks for common issues based on ticket description
 - Could integrate with the story generation AI for consistency
 - Generate review comments in Jira ticket
+
+## Git commit message builder / helper
+
+A command that helps generate a git commit message with context and proper spelling and grammar.
+- Respects the `.github/pull_request_template.md for formatting.
